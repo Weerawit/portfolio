@@ -1441,8 +1441,14 @@ function updateCalcBase() {
   if (!pos) return;
   const currentPrice = priceData[ticker]?.price || 0;
   document.getElementById('calc-buy-price').value = currentPrice ? currentPrice.toFixed(2) : "";
+  
+  const rows = PORTFOLIO.map(getRow);
+  const totalMv = rows.reduce((sum, r) => sum + (r.mv || 0), 0);
+  const currentMv = currentPrice * pos.shares;
+  const currentWeight = totalMv > 0 ? (currentMv / totalMv) * 100 : 0;
+  
   document.getElementById('calc-base-info').innerHTML = 
-    `Current: <b>${pos.shares.toLocaleString()}</b> shares @ <b>$${pos.avgCost.toFixed(2)}</b> (Total: $${pos.totalCost.toLocaleString()})`;
+    `Current: <b>${pos.shares.toLocaleString()}</b> shares @ <b>$${pos.avgCost.toFixed(2)}</b> (Total: $${pos.totalCost.toLocaleString()}, Weight: <b>${currentWeight.toFixed(2)}%</b>)`;
   runAvgCalc();
 }
 
