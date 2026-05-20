@@ -534,7 +534,14 @@
     color: var(--text);
     border-bottom: 1px solid var(--border);
   }
-  .transaction-table th { color: var(--muted); text-align: left; }
+  .transaction-table th { color: var(--muted); text-align: right; }
+  .transaction-table th:first-child,
+  .transaction-table td:first-child,
+  .transaction-table th:nth-child(2),
+  .transaction-table td:nth-child(2) { text-align: left; }
+  .transaction-table th:nth-child(3),
+  .transaction-table td:nth-child(3) { text-align: center; }
+  .transaction-table td { text-align: right; }
   .transaction-table tbody tr:hover { background: rgba(255,255,255,0.04); }
   .data-pill {
     display: inline-flex;
@@ -617,6 +624,10 @@
       <span class="hstat-label">Day Change</span>
       <span class="hstat-val" id="hdr-day">—</span>
     </div>
+    <div class="hstat">
+      <span class="hstat-label">SPX Change</span>
+      <span class="hstat-val" id="hdr-spx">—</span>
+    </div>
   </div>
   <div class="header-actions">
     <span class="refresh-dot" id="refresh-dot"></span>
@@ -684,6 +695,7 @@
             <th>Action</th>
             <th>Qty</th>
             <th>Price</th>
+            <th>Gain %</th>
             <th>Actions</th>
           </tr>
         </thead>
@@ -899,21 +911,31 @@ function buildHoldingsFromTransactions() {
 function renderTransactions() {
   const tbody = document.getElementById('txn-tbody');
   if (!transactions.length) {
-    tbody.innerHTML = '<tr><td colspan="6" style="color: var(--muted); text-align:center; padding:14px;">No transactions yet.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="7" style="color: var(--muted); text-align:center; padding:14px;">No transactions yet.</td></tr>';
     return;
   }
   const sorted = transactions
     .map((tx, index) => ({ tx, index }))
     .sort((a,b) => new Date(b.tx.date) - new Date(a.tx.date));
-  tbody.innerHTML = sorted.map(({ tx, index }) => `
+  tbody.innerHTML = sorted.map(({ tx, index }) => {
+    const ticker = tx.ticker.toUpperCase();
+    const pd = priceData[ticker];
+    let gainPctStr = '—';
+    if (pd && pd.price && tx.price > 0) {
+      const gainPct = ((pd.price - tx.price) / tx.price) * 100;
+      gainPctStr = `<span class="${colorClass(gainPct)}">${fmtSign(gainPct)}%</span>`;
+    }
+    return `
       <tr>
         <td>${formatDate(tx.date)}</td>
-        <td>${tx.ticker.toUpperCase()}</td>
+        <td>${ticker}</td>
         <td>${tx.action === 'buy' ? '<span class="tag-gain">Buy</span>' : '<span class="tag-loss">Sell</span>'}</td>
         <td>${tx.shares}</td>
         <td>$${tx.price.toFixed(2)}</td>
+        <td>${gainPctStr}</td>
         <td><button class="tx-delete-btn" onclick="deleteTransaction(${index})">Delete</button></td>
-      </tr>`).join('');
+      </tr>`;
+  }).join('');
 }
 function deleteTransaction(index) {
   if (index < 0 || index >= transactions.length) return;
@@ -999,7 +1021,10 @@ async function fetchPrices() {
   dot2.classList.add('spinning');
   document.getElementById('last-updated-text').textContent = 'Fetching prices from Finnhub…';
 
+  // Get portfolio tickers and add SPX
   const tickers = [...new Set(PORTFOLIO.map(p => p.ticker).filter(Boolean))];
+  if (!tickers.includes('SPX')) tickers.push('SPX');
+
   if (!tickers.length) {
     dot.classList.remove('spinning');
     dot2.classList.remove('spinning');
@@ -1027,6 +1052,7 @@ async function fetchPrices() {
     dot2.classList.remove('spinning');
     document.getElementById('last-updated-text').textContent = `Last updated: ${new Date().toLocaleTimeString()} · Prices via Finnhub`;
     renderTable();
+    renderTransactions(); // Refresh transactions to show Gain %
     renderMap();
     updateSummary();
   } catch (e) {
@@ -1038,22 +1064,53 @@ async function fetchPrices() {
 }
 
 async function fetchTickerPrice(ticker) {
-  const quoteUrl = `https://finnhub.io/api/v1/quote?symbol=${encodeURIComponent(ticker)}&token=${FINNHUB_API_KEY}`;
-  const profileUrl = `https://finnhub.io/api/v1/stock/profile2?symbol=${encodeURIComponent(ticker)}&token=${FINNHUB_API_KEY}`;
-  const [quoteRes, profileRes] = await Promise.all([fetch(quoteUrl), fetch(profileUrl)]);
+  // Map SPX to SPY (S&P 500 ETF) for Finnhub free tier compatibility
+  // Finnhub free tier does not support index quotes (^GSPC)
+  const apiTicker = ticker === 'SPX' ? 'SPY' : ticker;
+  const quoteUrl = `https://finnhub.io/api/v1/quote?symbol=${encodeURIComponent(apiTicker)}&token=${FINNHUB_API_KEY}`;
+  const quoteRes = await fetch(quoteUrl);
   if (!quoteRes.ok) throw new Error(`Quote HTTP ${quoteRes.status}`);
-  if (!profileRes.ok) throw new Error(`Profile HTTP ${profileRes.status}`);
   const quote = await quoteRes.json();
-  const profile = await profileRes.json();
+  
   const price = quote?.c;
   const changeD = quote?.d;
   const changePct = quote?.dp;
-  const marketCap = profile?.marketCapitalization || profile?.marketCap || null;
-  const industry = profile?.finnhubIndustry || profile?.industry || 'Unspecified';
-  const name = profile?.name || TICKER_META[ticker]?.name || ticker;
+
   if (price === undefined || changePct === undefined || changeD === undefined) {
     throw new Error(`Incomplete Finnhub quote data for ${ticker}`);
   }
+
+  // Optimize: Skip profile for index or if we already have it
+  let name = ticker;
+  let industry = 'Unspecified';
+  let marketCap = null;
+
+  if (ticker === 'SPX') {
+    name = 'S&P 500 (Proxy via SPY)';
+    industry = 'Index ETF';
+  } else if (TICKER_META[ticker]) {
+    name = TICKER_META[ticker].name;
+    industry = TICKER_META[ticker].industry;
+  } else if (priceData[ticker] && priceData[ticker].name && priceData[ticker].name !== ticker) {
+    name = priceData[ticker].name;
+    industry = priceData[ticker].industry;
+    marketCap = priceData[ticker].marketCap;
+  } else {
+    // Fetch profile only if needed (e.g., first time or not in META)
+    try {
+      const profileUrl = `https://finnhub.io/api/v1/stock/profile2?symbol=${encodeURIComponent(ticker)}&token=${FINNHUB_API_KEY}`;
+      const profileRes = await fetch(profileUrl);
+      if (profileRes.ok) {
+        const profile = await profileRes.json();
+        marketCap = profile?.marketCapitalization || profile?.marketCap || null;
+        industry = profile?.finnhubIndustry || profile?.industry || 'Unspecified';
+        name = profile?.name || ticker;
+      }
+    } catch (e) {
+      console.warn(`Profile fetch failed for ${ticker}`, e);
+    }
+  }
+
   return { price, changePct, changeD, marketCap, industry, name };
 }
 
@@ -1165,6 +1222,16 @@ function updateSummary() {
   document.getElementById('hdr-gain').textContent = (totalGainD >= 0 ? '+' : '') + '$' + Math.abs(totalGainD).toFixed(0);
   document.getElementById('hdr-day').className = 'hstat-val ' + colorClass(totalDayChange);
   document.getElementById('hdr-day').textContent = (totalDayChange >= 0 ? '+' : '') + '$' + Math.abs(totalDayChange).toFixed(0);
+
+  // Update SPX Stat
+  const spx = priceData['SPX'];
+  const spxHdr = document.getElementById('hdr-spx');
+  if (spx && spx.changePct !== undefined) {
+    spxHdr.className = 'hstat-val ' + colorClass(spx.changePct);
+    spxHdr.textContent = fmtSign(spx.changePct) + '%';
+  } else {
+    spxHdr.textContent = '—';
+  }
 }
 function setMapMode(m, btn) {
   mapMode = m;
