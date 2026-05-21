@@ -188,7 +188,9 @@
     font-size: 12px;
     color: var(--accent);
     min-width: 44px;
+    cursor: pointer;
   }
+  .tick-badge:hover { text-decoration: underline; }
   .company-name { color: var(--muted); font-size: 12px; }
   .gain { color: var(--gain); }
   .loss { color: var(--loss); }
@@ -585,9 +587,46 @@
   .calc-res-val { font-weight: 700; color: var(--accent); font-family: 'JetBrains Mono', monospace; font-size: 13px; }
   .calc-res-secondary { color: var(--muted); font-size: 11px; font-weight: 400; }
   .calc-row-label { font-size: 10px; color: var(--muted); display: block; margin-bottom: 2px; text-transform: uppercase; }
+  /* CHART TOOLTIP */
+  .chart-tooltip {
+    position: fixed;
+    background: var(--bg2);
+    border: 1px solid var(--border2);
+    border-radius: 12px;
+    padding: 12px;
+    pointer-events: none;
+    z-index: 2000;
+    width: 900px;
+    height: 600px;
+    box-shadow: 0 12px 48px rgba(0,0,0,0.7);
+    display: none;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .chart-tooltip-title {
+    font-family: 'Syne', sans-serif;
+    font-weight: 700;
+    font-size: 13px;
+    color: var(--accent);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  #chart-container {
+    flex: 1;
+    min-height: 0;
+  }
 </style>
 </head>
 <body>
+
+<div class="chart-tooltip" id="chart-tooltip">
+  <div class="chart-tooltip-title">
+    <span id="chart-title-tick"></span>
+    <span id="chart-title-range" style="color:var(--muted); font-size:10px; font-weight:400;">Last 3 Months</span>
+  </div>
+  <div id="chart-container"></div>
+</div>
 
 <div class="tooltip" id="tooltip">
   <div class="tt-tick" id="tt-tick"></div>
@@ -621,7 +660,7 @@
       <span class="hstat-val" id="hdr-gain">—</span>
     </div>
     <div class="hstat">
-      <span class="hstat-label">Day Change</span>
+      <span class="hstat-label">Day %</span>
       <span class="hstat-val" id="hdr-day">—</span>
     </div>
     <div class="hstat">
@@ -679,7 +718,10 @@
     </div>
   </div>
   <div class="transaction-panel">
-    <div class="section-title">Transaction history</div>
+    <div class="section-title" style="display:flex; justify-content:space-between; align-items:center;">
+      <span>Transaction history <span id="txn-filter-indicator" style="color: var(--accent); font-size: 11px; margin-left: 8px;"></span></span>
+      <button id="btn-clear-filter" class="btn" style="padding: 2px 8px; font-size: 10px; display: none;" onclick="setTxnFilter(null)">Clear</button>
+    </div>
     <div class="data-pill">Saved locally in browser</div>
     <div style="display:flex; flex-wrap:wrap; gap:8px; margin-bottom:12px;">
       <button class="btn" onclick="downloadTransactions()">Export JSON</button>
@@ -781,6 +823,42 @@ let priceData = {};
 let sortCol = 'marketValue';
 let sortAsc = false;
 let colorMode = 'day';
+let txnFilter = null;
+
+function setTxnFilter(ticker) {
+  txnFilter = ticker;
+  document.getElementById('txn-filter-indicator').textContent = ticker ? `(Filter: ${ticker})` : '';
+  document.getElementById('btn-clear-filter').style.display = ticker ? 'inline-block' : 'none';
+  renderTransactions();
+}
+
+function showTickerChart(ticker, e) {
+  const tooltip = document.getElementById('chart-tooltip');
+  document.getElementById('chart-title-tick').textContent = ticker + ' (Live Chart)';
+  
+  // Position tooltip
+  tooltip.style.display = 'flex';
+  const x = e.clientX + 20;
+  const y = e.clientY - 300; // Adjusted for 600px height
+  tooltip.style.left = Math.min(x, window.innerWidth - 920) + 'px';
+  tooltip.style.top = Math.max(10, Math.min(y, window.innerHeight - 610)) + 'px';
+
+  const container = document.getElementById('chart-container');
+  const apiTicker = ticker === 'SPX' ? 'SPY' : ticker;
+
+  // Use TradingView Widget (Free, No API Key needed for historical)
+  container.innerHTML = `
+    <iframe 
+      style="width: 100%; height: 100%; border: none;"
+      src="https://s.tradingview.com/widgetembed/?frameElementId=tradingview_1&symbol=${apiTicker}&interval=D&hidesidetoolbar=1&hidetoptoolbar=1&symboledit=0&saveimage=0&toolbarbg=f1f3f6&studies=%5B%22RSI%40tv-basicstudies%22%2C%22Volume%40tv-basicstudies%22%5D&theme=dark&style=1&timezone=Etc%2FUTC&studies_overrides=%7B%7D&overrides=%7B%7D&enabled_features=%5B%5D&disabled_features=%5B%5D&locale=en&utm_source=localhost&utm_medium=widget&utm_campaign=chart&utm_term=${apiTicker}"
+    ></iframe>
+  `;
+}
+
+function hideTickerChart() {
+  document.getElementById('chart-tooltip').style.display = 'none';
+  document.getElementById('chart-container').innerHTML = '';
+}
 
 function fmt(n, dec=2) {
   if (n === undefined || n === null || isNaN(n)) return '—';
@@ -914,8 +992,20 @@ function renderTransactions() {
     tbody.innerHTML = '<tr><td colspan="7" style="color: var(--muted); text-align:center; padding:14px;">No transactions yet.</td></tr>';
     return;
   }
-  const sorted = transactions
-    .map((tx, index) => ({ tx, index }))
+  let filtered = transactions;
+  if (txnFilter) {
+    filtered = transactions.filter(tx => tx.ticker.toUpperCase() === txnFilter.toUpperCase());
+  }
+  if (!filtered.length) {
+    tbody.innerHTML = `<tr><td colspan="7" style="color: var(--muted); text-align:center; padding:14px;">No transactions found for ${txnFilter}.</td></tr>`;
+    return;
+  }
+  const sorted = filtered
+    .map((tx, index) => {
+      // Find original index in transactions array for delete function
+      const originalIndex = transactions.findIndex(t => t === tx);
+      return { tx, index: originalIndex };
+    })
     .sort((a,b) => new Date(b.tx.date) - new Date(a.tx.date));
   tbody.innerHTML = sorted.map(({ tx, index }) => {
     const ticker = tx.ticker.toUpperCase();
@@ -956,7 +1046,7 @@ function addTransaction() {
   transactions.push({ date, ticker, action, shares, price });
   saveTransactions();
   refreshPortfolio();
-  document.getElementById('txn-date').value = '';
+  setTodayDate();
   document.getElementById('txn-ticker').value = '';
   document.getElementById('txn-action').value = 'buy';
   document.getElementById('txn-shares').value = '';
@@ -967,7 +1057,7 @@ function resetTransactions() {
   // transactions = DEFAULT_TRANSACTIONS.slice();
   // saveTransactions();
   // refreshPortfolio();
-  document.getElementById('txn-date').value = '';
+  setTodayDate();
   document.getElementById('txn-ticker').value = '';
   document.getElementById('txn-action').value = 'buy';
   document.getElementById('txn-shares').value = '';
@@ -1162,7 +1252,10 @@ function renderTable() {
     const gainPctStr = r.gainPct !== null ? `<span class="${colorClass(r.gainPct)}">${fmtSign(r.gainPct)}%</span>` : '—';
     const dayStr = r.dayChange !== null ? `<span class="${colorClass(r.dayChange)}">${r.dayChange >= 0?'+':''}$${Math.abs(r.dayChange).toFixed(2)}</span>` : '—';
     return `<tr>
-      <td><div class="ticker-cell"><span class="tick-badge">${r.ticker}</span></div></td>
+      <td><div class="ticker-cell"><span class="tick-badge" 
+        onclick="setTxnFilter('${r.ticker}')" 
+        onmouseenter="showTickerChart('${r.ticker}', event)" 
+        onmouseleave="hideTickerChart()">${r.ticker}</span></div></td>
       <td class="company-name">${r.name}</td>
       <td>${r.shares}</td>
       <td>$${r.avgCost.toFixed(2)}</td>
@@ -1221,8 +1314,8 @@ function updateSummary() {
   document.getElementById('hdr-mv').textContent = '$' + (totalMV / 1000).toFixed(1) + 'K';
   document.getElementById('hdr-gain').className = 'hstat-val ' + colorClass(totalGainD);
   document.getElementById('hdr-gain').textContent = (totalGainD >= 0 ? '+' : '') + '$' + Math.abs(totalGainD).toFixed(0);
-  document.getElementById('hdr-day').className = 'hstat-val ' + colorClass(totalDayChange);
-  document.getElementById('hdr-day').textContent = (totalDayChange >= 0 ? '+' : '') + '$' + Math.abs(totalDayChange).toFixed(0);
+  document.getElementById('hdr-day').className = 'hstat-val ' + colorClass(totalDayPct);
+  document.getElementById('hdr-day').textContent = fmtSign(totalDayPct) + '%';
 
   // Update SPX Stat
   const spx = priceData['SPX'];
@@ -1442,9 +1535,13 @@ function refreshPortfolio() {
   updateSummary();
   renderMap();
 }
+function setTodayDate() {
+  document.getElementById('txn-date').value = new Date().toISOString().split('T')[0];
+}
 loadTransactions();
 refreshPortfolio();
 fetchPrices();
+setTodayDate();
 setInterval(fetchPrices, 300000);
 window.addEventListener('resize', () => {
   if (document.getElementById('view-map').style.display !== 'none') renderMap();
