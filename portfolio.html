@@ -594,7 +594,6 @@
     border: 1px solid var(--border2);
     border-radius: 12px;
     padding: 12px;
-    pointer-events: none;
     z-index: 2000;
     width: 900px;
     height: 600px;
@@ -620,7 +619,7 @@
 </head>
 <body>
 
-<div class="chart-tooltip" id="chart-tooltip">
+<div class="chart-tooltip" id="chart-tooltip" onmouseenter="cancelHideChart()" onmouseleave="hideTickerChart()">
   <div class="chart-tooltip-title">
     <span id="chart-title-tick"></span>
     <span id="chart-title-range" style="color:var(--muted); font-size:10px; font-weight:400;">Last 3 Months</span>
@@ -824,6 +823,7 @@ let sortCol = 'marketValue';
 let sortAsc = false;
 let colorMode = 'day';
 let txnFilter = null;
+let chartHideTimer = null;
 
 function setTxnFilter(ticker) {
   txnFilter = ticker;
@@ -833,8 +833,19 @@ function setTxnFilter(ticker) {
 }
 
 function showTickerChart(ticker, e) {
+  if (chartHideTimer) {
+    clearTimeout(chartHideTimer);
+    chartHideTimer = null;
+  }
+  
   const tooltip = document.getElementById('chart-tooltip');
+  // If moving within the same ticker, don't re-render iframe
+  if (tooltip.dataset.activeTicker === ticker && tooltip.style.display === 'flex') {
+    return; 
+  }
+
   document.getElementById('chart-title-tick').textContent = ticker + ' (Live Chart)';
+  tooltip.dataset.activeTicker = ticker;
   
   // Position tooltip
   tooltip.style.display = 'flex';
@@ -856,8 +867,20 @@ function showTickerChart(ticker, e) {
 }
 
 function hideTickerChart() {
-  document.getElementById('chart-tooltip').style.display = 'none';
-  document.getElementById('chart-container').innerHTML = '';
+  // Add a small delay so user can move mouse from ticker to the chart window
+  chartHideTimer = setTimeout(() => {
+    const tooltip = document.getElementById('chart-tooltip');
+    tooltip.style.display = 'none';
+    document.getElementById('chart-container').innerHTML = '';
+    tooltip.dataset.activeTicker = '';
+  }, 200);
+}
+
+function cancelHideChart() {
+  if (chartHideTimer) {
+    clearTimeout(chartHideTimer);
+    chartHideTimer = null;
+  }
 }
 
 function fmt(n, dec=2) {
