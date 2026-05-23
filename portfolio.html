@@ -858,6 +858,8 @@ const DEFAULT_TRANSACTIONS = [
 
 let portfolios = [];
 let activePortfolioId = null;
+let currentTitleBase = '';
+let titleDotActive = true;
 let transactions = [];
 let PORTFOLIO = [];
 let priceData = {};
@@ -1511,7 +1513,26 @@ function updateSummary() {
   } else {
     spxHdr.textContent = '—';
   }
+
+  // Update Document Title
+  const emoji = totalDayChange >= 0 ? '🟢' : '🔴';
+  const sign = totalDayChange >= 0 ? '+' : '';
+  const spxStr = (spx && spx.changePct !== undefined) ? ` | SPX ${fmtSign(spx.changePct)}%` : '';
+  
+  currentTitleBase = `${emoji} ${sign}$${Math.abs(totalDayChange).toLocaleString(undefined, {maximumFractionDigits:0})} (${fmtSign(totalDayPct)}%)${spxStr}`;
+  updateFullTitle();
 }
+
+function updateFullTitle() {
+  const dot = titleDotActive ? '• ' : '  ';
+  document.title = dot + currentTitleBase;
+}
+
+// Blinking effect for title
+setInterval(() => {
+  titleDotActive = !titleDotActive;
+  if (currentTitleBase) updateFullTitle();
+}, 1000);
 function setMapMode(m, btn) {
   mapMode = m;
   document.querySelectorAll('#map-size-toggle .map-btn').forEach(b => b.classList.remove('active'));
