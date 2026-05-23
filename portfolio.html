@@ -369,13 +369,13 @@
     border-radius: 4px;
   }
   .treemap-cell:hover { filter: brightness(1.15); z-index: 10; }
-  .treemap-cell.gain-hi { background: #166534; }
-  .treemap-cell.gain-md { background: #14532d; }
-  .treemap-cell.gain-lo { background: #15803d; }
+  .treemap-cell.gain-hi { background: #22c55e; }
+  .treemap-cell.gain-md { background: #16a34a; }
+  .treemap-cell.gain-lo { background: #14532d; }
   .treemap-cell.neutral-c { background: #374151; }
   .treemap-cell.loss-lo { background: #7f1d1d; }
-  .treemap-cell.loss-md { background: #991b1b; }
-  .treemap-cell.loss-hi { background: #b91c1c; }
+  .treemap-cell.loss-md { background: #b91c1c; }
+  .treemap-cell.loss-hi { background: #ef4444; }
   .cell-tick {
     font-family: 'Syne', sans-serif;
     font-weight: 800;
@@ -788,13 +788,13 @@
     </div>
     <div class="map-legend">
       <span class="legend-label">-3%</span>
+      <div class="legend-block" style="background:#ef4444"></div>
       <div class="legend-block" style="background:#b91c1c"></div>
-      <div class="legend-block" style="background:#991b1b"></div>
       <div class="legend-block" style="background:#7f1d1d"></div>
       <div class="legend-block" style="background:#374151"></div>
-      <div class="legend-block" style="background:#15803d"></div>
       <div class="legend-block" style="background:#14532d"></div>
-      <div class="legend-block" style="background:#166534"></div>
+      <div class="legend-block" style="background:#16a34a"></div>
+      <div class="legend-block" style="background:#22c55e"></div>
       <span class="legend-label">+3%</span>
     </div>
   </div>
@@ -1363,12 +1363,16 @@ function setColorMode(m, btn) {
   renderMap();
 }
 function getColorClass(val) {
-  if (val >= 3) return 'gain-hi';
-  if (val >= 1) return 'gain-md';
+  const isDay = colorMode === 'day';
+  const hi = isDay ? 3 : 15;
+  const md = isDay ? 1 : 5;
+
+  if (val >= hi) return 'gain-hi';
+  if (val >= md) return 'gain-md';
   if (val > 0) return 'gain-lo';
   if (val === 0) return 'neutral-c';
-  if (val > -1) return 'loss-lo';
-  if (val > -3) return 'loss-md';
+  if (val > -md) return 'loss-lo';
+  if (val > -hi) return 'loss-md';
   return 'loss-hi';
 }
 function squarify(items, x, y, w, h) {
@@ -1477,11 +1481,12 @@ function renderMapPane(container, items, title) {
       const minDim = Math.min(cell.w, cell.h);
       const fontSize = Math.max(8, Math.min(28, minDim * 0.22));
       const pctSize = Math.max(7, fontSize * 0.55);
+      const displayPct = colorMode === 'day' ? cell.changePct : cell.gainPct;
       if (cell.w > 40 && cell.h > 24) {
         div.innerHTML = `
           <div class="cell-industry">${cell.industry}</div>
           <div class="cell-tick" style="font-size:${fontSize}px">${cell.ticker}</div>
-          <div class="cell-pct" style="font-size:${pctSize}px">${cell.changePct !== undefined ? fmtSign(cell.changePct) + '%' : ''}</div>
+          <div class="cell-pct" style="font-size:${pctSize}px">${displayPct !== null && displayPct !== undefined ? fmtSign(displayPct) + '%' : ''}</div>
         `;
       }
       div.addEventListener('mousemove', (e) => {
@@ -1531,6 +1536,14 @@ function renderMap() {
   }
   renderMapPane(gainersContainer, gainers, `Gainers (${((gainerWeight / (gainerWeight + loserWeight)) * 100 || 0).toFixed(1)}%)`);
   renderMapPane(losersContainer, losers, `Losers (${((loserWeight / (gainerWeight + loserWeight)) * 100 || 0).toFixed(1)}%)`);
+
+  // Update Legend labels
+  const labels = document.querySelectorAll('.legend-label');
+  if (labels.length >= 2) {
+    const limit = colorMode === 'day' ? '3%' : '15%';
+    labels[0].textContent = '-' + limit;
+    labels[1].textContent = '+' + limit;
+  }
 }
 
 function groupItemsByIndustry(items) {
