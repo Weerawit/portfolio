@@ -141,11 +141,15 @@
   #view-table { display: block; }
   #view-map { display: block; }
 
-  .table-wrap { overflow-x: auto; }
+  .table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
   table {
     width: 100%;
     border-collapse: collapse;
-    min-width: 1100px;
+    min-width: 1000px;
+  }
+  @media (max-width: 768px) {
+    table { min-width: 800px; }
+    td, th { padding: 8px 10px; font-size: 11px; }
   }
   thead th {
     padding: 10px 12px;
@@ -369,13 +373,13 @@
     border-radius: 4px;
   }
   .treemap-cell:hover { filter: brightness(1.15); z-index: 10; }
-  .treemap-cell.gain-hi { background: #166534; }
-  .treemap-cell.gain-md { background: #14532d; }
-  .treemap-cell.gain-lo { background: #15803d; }
+  .treemap-cell.gain-hi { background: #22c55e; }
+  .treemap-cell.gain-md { background: #16a34a; }
+  .treemap-cell.gain-lo { background: #14532d; }
   .treemap-cell.neutral-c { background: #374151; }
   .treemap-cell.loss-lo { background: #7f1d1d; }
-  .treemap-cell.loss-md { background: #991b1b; }
-  .treemap-cell.loss-hi { background: #b91c1c; }
+  .treemap-cell.loss-md { background: #b91c1c; }
+  .treemap-cell.loss-hi { background: #ef4444; }
   .cell-tick {
     font-family: 'Syne', sans-serif;
     font-weight: 800;
@@ -615,6 +619,36 @@
     flex: 1;
     min-height: 0;
   }
+  /* RESPONSIVE BREAKPOINTS */
+  @media (max-width: 1024px) {
+    .header-stats { gap: 16px; }
+    .hstat-val { font-size: 13px; }
+    .summary-bar { flex-wrap: wrap; }
+    .sum-card { flex: 1 1 45%; }
+    #treemap-wrapper { grid-template-columns: 1fr !important; aspect-ratio: auto; height: 800px; }
+  }
+
+  @media (max-width: 768px) {
+    .header { padding: 12px 16px; flex-direction: column; align-items: flex-start; gap: 12px; }
+    .header-stats { width: 100%; justify-content: space-between; border-top: 1px solid var(--border); padding-top: 12px; }
+    .header-actions { width: 100%; justify-content: flex-end; }
+    .actions-bar { padding: 12px; }
+    .transaction-panel { min-width: 100%; }
+    .sum-card { flex: 1 1 100%; }
+    .brand-name { font-size: 15px; }
+    #treemap-wrapper { height: 1000px; }
+    .modal-card { padding: 16px; width: 100%; height: 100%; border-radius: 0; overflow-y: auto; }
+  }
+
+  @media (max-width: 480px) {
+    .header-stats { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .hstat { align-items: flex-start; }
+    .tabs { overflow-x: auto; white-space: nowrap; }
+    .tab { padding: 12px 14px; font-size: 11px; }
+    .transaction-grid { grid-template-columns: 1fr; }
+    .sum-val { font-size: 16px; }
+    .map-controls { flex-direction: column; align-items: flex-start; }
+  }
 </style>
 </head>
 <body>
@@ -648,6 +682,8 @@
   <div class="header-brand">
     <div class="brand-icon">PF</div>
     <div class="brand-name">Portfolio Tracker</div>
+    <select id="portfolio-selector" onchange="switchPortfolio(this.value)" style="background: var(--bg3); color: var(--text); border: 1px solid var(--border2); border-radius: 6px; padding: 4px 8px; font-family: inherit; font-size: 12px; margin-left: 10px; cursor: pointer; outline: none;"></select>
+    <button class="btn" onclick="openPortfolioManager()" title="Manage Portfolios" style="padding: 4px 8px; margin-left: 4px; border-color: var(--border2); color: var(--muted); font-size: 14px;">⚙</button>
   </div>
   <div class="header-stats">
     <div class="hstat">
@@ -788,13 +824,13 @@
     </div>
     <div class="map-legend">
       <span class="legend-label">-3%</span>
+      <div class="legend-block" style="background:#ef4444"></div>
       <div class="legend-block" style="background:#b91c1c"></div>
-      <div class="legend-block" style="background:#991b1b"></div>
       <div class="legend-block" style="background:#7f1d1d"></div>
       <div class="legend-block" style="background:#374151"></div>
-      <div class="legend-block" style="background:#15803d"></div>
       <div class="legend-block" style="background:#14532d"></div>
-      <div class="legend-block" style="background:#166534"></div>
+      <div class="legend-block" style="background:#16a34a"></div>
+      <div class="legend-block" style="background:#22c55e"></div>
       <span class="legend-label">+3%</span>
     </div>
   </div>
@@ -806,7 +842,11 @@
 </div>
 
 <script>
-const STORAGE_KEY = 'portfolio_transactions_v1';
+const STORAGE_KEY_OLD = 'portfolio_transactions_v1';
+const PORTFOLIOS_LIST_KEY = 'portfolio_list_v2';
+const ACTIVE_PORTFOLIO_KEY = 'active_portfolio_id_v2';
+const TXN_PREFIX = 'portfolio_txns_';
+
 const FINNHUB_API_KEY = 'd7rkrkhr01qviakd6nd0d7rkrkhr01qviakd6ndg';
 const TICKER_META = {
   NVO:{name:'Novo Nordisk ADR', industry:'Drug Manufacturers'}
@@ -816,6 +856,8 @@ const DEFAULT_TRANSACTIONS = [
   { date:'2025-11-01', ticker:'NVO', action:'buy', shares:95, price:53.92 }
 ];
 
+let portfolios = [];
+let activePortfolioId = null;
 let transactions = [];
 let PORTFOLIO = [];
 let priceData = {};
@@ -825,6 +867,141 @@ let colorMode = 'day';
 let txnFilter = null;
 let chartHideTimer = null;
 
+function initPortfolios() {
+  const storedList = localStorage.getItem(PORTFOLIOS_LIST_KEY);
+  const storedActive = localStorage.getItem(ACTIVE_PORTFOLIO_KEY);
+  const oldData = localStorage.getItem(STORAGE_KEY_OLD);
+
+  if (storedList) {
+    portfolios = JSON.parse(storedList);
+    activePortfolioId = storedActive || (portfolios.length ? portfolios[0].id : null);
+    
+    // Safety check if activePortfolioId no longer exists
+    if (activePortfolioId && !portfolios.find(p => p.id === activePortfolioId)) {
+      activePortfolioId = portfolios[0]?.id || null;
+    }
+  } else {
+    // Migration or First time
+    const defaultId = 'p_' + Date.now();
+    const defaultName = 'My Portfolio';
+    portfolios = [{ id: defaultId, name: defaultName }];
+    activePortfolioId = defaultId;
+    
+    if (oldData) {
+      localStorage.setItem(TXN_PREFIX + defaultId, oldData);
+    } else {
+      localStorage.setItem(TXN_PREFIX + defaultId, JSON.stringify(DEFAULT_TRANSACTIONS));
+    }
+    
+    savePortfoliosList();
+    localStorage.setItem(ACTIVE_PORTFOLIO_KEY, activePortfolioId);
+  }
+  renderPortfolioSelector();
+}
+
+function savePortfoliosList() {
+  localStorage.setItem(PORTFOLIOS_LIST_KEY, JSON.stringify(portfolios));
+}
+
+function renderPortfolioSelector() {
+  const selector = document.getElementById('portfolio-selector');
+  if (!selector) return;
+  selector.innerHTML = portfolios.map(p => 
+    `<option value="${p.id}" ${p.id === activePortfolioId ? 'selected' : ''}>${p.name}</option>`
+  ).join('');
+}
+
+function switchPortfolio(id) {
+  activePortfolioId = id;
+  localStorage.setItem(ACTIVE_PORTFOLIO_KEY, id);
+  loadTransactions();
+  refreshPortfolio();
+  fetchPrices();
+}
+
+function loadTransactions() {
+  try {
+    const key = TXN_PREFIX + activePortfolioId;
+    const stored = localStorage.getItem(key);
+    transactions = stored ? JSON.parse(stored) : [];
+  } catch (e) {
+    transactions = [];
+  }
+}
+function saveTransactions() {
+  if (!activePortfolioId) return;
+  const key = TXN_PREFIX + activePortfolioId;
+  localStorage.setItem(key, JSON.stringify(transactions));
+}
+
+async function openPortfolioManager() {
+  let listHtml = portfolios.map(p => `
+    <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 8px; padding: 10px; background: var(--bg3); border-radius: 8px; border: 1px solid var(--border);">
+      <div style="flex: 1; font-weight: 500;">${p.name} ${p.id === activePortfolioId ? '<span style="color: var(--gain); font-size: 10px; margin-left: 5px;">(Active)</span>' : ''}</div>
+      <button class="btn" style="padding: 4px 8px; font-size: 11px;" onclick="renamePortfolioPrompt('${p.id}', '${p.name}')">Rename</button>
+      <button class="btn" style="padding: 4px 8px; font-size: 11px; border-color: var(--loss); color: var(--loss);" onclick="deletePortfolioPrompt('${p.id}', '${p.name}')">Delete</button>
+    </div>
+  `).join('');
+
+  const content = `
+    <div style="margin-bottom: 20px;">
+      <button class="btn btn-primary" style="width: 100%;" onclick="createNewPortfolioPrompt()">+ Create New Portfolio</button>
+    </div>
+    <div style="max-height: 300px; overflow-y: auto; padding-right: 5px;">
+      ${listHtml}
+    </div>
+  `;
+
+  showModal({
+    title: 'Manage Portfolios',
+    message: content,
+    buttons: [{ text: 'Close', onClick: () => {} }]
+  });
+}
+
+async function createNewPortfolioPrompt() {
+  const name = prompt("Enter new portfolio name:");
+  if (name && name.trim()) {
+    const newId = 'p_' + Date.now();
+    portfolios.push({ id: newId, name: name.trim() });
+    savePortfoliosList();
+    localStorage.setItem(TXN_PREFIX + newId, JSON.stringify([]));
+    switchPortfolio(newId);
+    renderPortfolioSelector();
+    openPortfolioManager(); // Re-open manager to show updated list
+  }
+}
+
+async function renamePortfolioPrompt(id, oldName) {
+  const newName = prompt("Rename portfolio:", oldName);
+  if (newName && newName.trim() && newName.trim() !== oldName) {
+    const p = portfolios.find(x => x.id === id);
+    if (p) {
+      p.name = newName.trim();
+      savePortfoliosList();
+      renderPortfolioSelector();
+      openPortfolioManager();
+    }
+  }
+}
+
+async function deletePortfolioPrompt(id, name) {
+  if (portfolios.length <= 1) {
+    alert("You must have at least one portfolio.");
+    return;
+  }
+  if (confirm(`Are you sure you want to delete "${name}"? This will delete all its transactions.`)) {
+    portfolios = portfolios.filter(p => p.id !== id);
+    savePortfoliosList();
+    localStorage.removeItem(TXN_PREFIX + id);
+    if (activePortfolioId === id) {
+      switchPortfolio(portfolios[0].id);
+    } else {
+      renderPortfolioSelector();
+      openPortfolioManager();
+    }
+  }
+}
 function setTxnFilter(ticker) {
   txnFilter = ticker;
   document.getElementById('txn-filter-indicator').textContent = ticker ? `(Filter: ${ticker})` : '';
@@ -839,7 +1016,6 @@ function showTickerChart(ticker, e) {
   }
   
   const tooltip = document.getElementById('chart-tooltip');
-  // If moving within the same ticker, don't re-render iframe
   if (tooltip.dataset.activeTicker === ticker && tooltip.style.display === 'flex') {
     return; 
   }
@@ -847,17 +1023,15 @@ function showTickerChart(ticker, e) {
   document.getElementById('chart-title-tick').textContent = ticker + ' (Live Chart)';
   tooltip.dataset.activeTicker = ticker;
   
-  // Position tooltip
   tooltip.style.display = 'flex';
   const x = e.clientX + 20;
-  const y = e.clientY - 300; // Adjusted for 600px height
+  const y = e.clientY - 300;
   tooltip.style.left = Math.min(x, window.innerWidth - 920) + 'px';
   tooltip.style.top = Math.max(10, Math.min(y, window.innerHeight - 610)) + 'px';
 
   const container = document.getElementById('chart-container');
   const apiTicker = ticker === 'SPX' ? 'SPY' : ticker;
 
-  // Use TradingView Widget (Free, No API Key needed for historical)
   container.innerHTML = `
     <iframe 
       style="width: 100%; height: 100%; border: none;"
@@ -867,7 +1041,6 @@ function showTickerChart(ticker, e) {
 }
 
 function hideTickerChart() {
-  // Add a small delay so user can move mouse from ticker to the chart window
   chartHideTimer = setTimeout(() => {
     const tooltip = document.getElementById('chart-tooltip');
     tooltip.style.display = 'none';
@@ -902,17 +1075,6 @@ function colorClass(n) {
   return n > 0 ? 'gain' : n < 0 ? 'loss' : 'neutral';
 }
 
-function loadTransactions() {
-  try {
-    const stored = localStorage.getItem(STORAGE_KEY);
-    transactions = stored ? JSON.parse(stored) : DEFAULT_TRANSACTIONS.slice();
-  } catch (e) {
-    transactions = DEFAULT_TRANSACTIONS.slice();
-  }
-}
-function saveTransactions() {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(transactions));
-}
 function showModal(options) {
   const backdrop = document.getElementById('modal-backdrop');
   const title = document.getElementById('modal-title');
@@ -1363,12 +1525,16 @@ function setColorMode(m, btn) {
   renderMap();
 }
 function getColorClass(val) {
-  if (val >= 3) return 'gain-hi';
-  if (val >= 1) return 'gain-md';
+  const isDay = colorMode === 'day';
+  const hi = isDay ? 3 : 15;
+  const md = isDay ? 1 : 5;
+
+  if (val >= hi) return 'gain-hi';
+  if (val >= md) return 'gain-md';
   if (val > 0) return 'gain-lo';
   if (val === 0) return 'neutral-c';
-  if (val > -1) return 'loss-lo';
-  if (val > -3) return 'loss-md';
+  if (val > -md) return 'loss-lo';
+  if (val > -hi) return 'loss-md';
   return 'loss-hi';
 }
 function squarify(items, x, y, w, h) {
@@ -1477,11 +1643,12 @@ function renderMapPane(container, items, title) {
       const minDim = Math.min(cell.w, cell.h);
       const fontSize = Math.max(8, Math.min(28, minDim * 0.22));
       const pctSize = Math.max(7, fontSize * 0.55);
+      const displayPct = colorMode === 'day' ? cell.changePct : cell.gainPct;
       if (cell.w > 40 && cell.h > 24) {
         div.innerHTML = `
           <div class="cell-industry">${cell.industry}</div>
           <div class="cell-tick" style="font-size:${fontSize}px">${cell.ticker}</div>
-          <div class="cell-pct" style="font-size:${pctSize}px">${cell.changePct !== undefined ? fmtSign(cell.changePct) + '%' : ''}</div>
+          <div class="cell-pct" style="font-size:${pctSize}px">${displayPct !== null && displayPct !== undefined ? fmtSign(displayPct) + '%' : ''}</div>
         `;
       }
       div.addEventListener('mousemove', (e) => {
@@ -1531,6 +1698,14 @@ function renderMap() {
   }
   renderMapPane(gainersContainer, gainers, `Gainers (${((gainerWeight / (gainerWeight + loserWeight)) * 100 || 0).toFixed(1)}%)`);
   renderMapPane(losersContainer, losers, `Losers (${((loserWeight / (gainerWeight + loserWeight)) * 100 || 0).toFixed(1)}%)`);
+
+  // Update Legend labels
+  const labels = document.querySelectorAll('.legend-label');
+  if (labels.length >= 2) {
+    const limit = colorMode === 'day' ? '3%' : '15%';
+    labels[0].textContent = '-' + limit;
+    labels[1].textContent = '+' + limit;
+  }
 }
 
 function groupItemsByIndustry(items) {
@@ -1561,10 +1736,11 @@ function refreshPortfolio() {
 function setTodayDate() {
   document.getElementById('txn-date').value = new Date().toISOString().split('T')[0];
 }
+setTodayDate();
+initPortfolios();
 loadTransactions();
 refreshPortfolio();
 fetchPrices();
-setTodayDate();
 setInterval(fetchPrices, 300000);
 window.addEventListener('resize', () => {
   if (document.getElementById('view-map').style.display !== 'none') renderMap();
