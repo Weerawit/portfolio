@@ -1135,21 +1135,33 @@ function formatDate(dateStr) {
 }
 function buildHoldingsFromTransactions() {
   const buckets = {};
+  const realizedPLMap = new Map();
+  // Use a sorted copy to ensure FIFO matches chronological order
   const sorted = [...transactions].sort((a,b) => new Date(a.date) - new Date(b.date));
+  
   sorted.forEach(tx => {
-    const ticker = tx.ticker.trim().toUpperCase();
+    const ticker = tx.ticker?.trim().toUpperCase();
     if (!ticker || !tx.shares || tx.shares <= 0) return;
+    
     if (!buckets[ticker]) {
       const meta = TICKER_META[ticker] || { name: ticker, industry: 'Unspecified' };
       buckets[ticker] = { ticker, name: meta.name, industry: meta.industry, lots: [] };
     }
     const entry = buckets[ticker];
+    
     if (tx.action === 'buy') {
       entry.lots.push({ shares: tx.shares, costPerShare: tx.price });
-    } else {
+    } else if (tx.action === 'sell') {
       let remaining = tx.shares;
+      let totalCost = 0;
+      let sharesSold = 0;
+      
       while (remaining > 0 && entry.lots.length) {
         const lot = entry.lots[0];
+        const soldFromLot = Math.min(remaining, lot.shares);
+        totalCost += soldFromLot * lot.costPerShare;
+        sharesSold += soldFromLot;
+        
         if (lot.shares <= remaining) {
           remaining -= lot.shares;
           entry.lots.shift();
@@ -1158,9 +1170,17 @@ function buildHoldingsFromTransactions() {
           remaining = 0;
         }
       }
+      
+      if (sharesSold > 0) {
+        const proceeds = sharesSold * tx.price;
+        const profit = proceeds - totalCost;
+        const profitPct = (profit / totalCost) * 100;
+        realizedPLMap.set(tx, { profit, profitPct });
+      }
     }
   });
-  return Object.values(buckets).map(entry => {
+  
+  const holdings = Object.values(buckets).map(entry => {
     const shares = parseFloat(entry.lots.reduce((sum, lot) => sum + lot.shares, 0).toFixed(4));
     const totalCost = parseFloat(entry.lots.reduce((sum, lot) => sum + lot.shares * lot.costPerShare, 0).toFixed(2));
     return {
@@ -1172,36 +1192,51 @@ function buildHoldingsFromTransactions() {
       totalCost,
     };
   }).filter(item => item.shares > 0);
+  
+  return { holdings, realizedPLMap };
 }
+
 function renderTransactions() {
   const tbody = document.getElementById('txn-tbody');
   if (!transactions.length) {
     tbody.innerHTML = '<tr><td colspan="7" style="color: var(--muted); text-align:center; padding:14px;">No transactions yet.</td></tr>';
     return;
   }
+  
+  // Calculate realized P/L once for this render pass
+  const { realizedPLMap } = buildHoldingsFromTransactions();
+  
   let filtered = transactions;
   if (txnFilter) {
-    filtered = transactions.filter(tx => tx.ticker.toUpperCase() === txnFilter.toUpperCase());
+    filtered = transactions.filter(tx => tx.ticker && tx.ticker.toUpperCase() === txnFilter.toUpperCase());
   }
+  
   if (!filtered.length) {
     tbody.innerHTML = `<tr><td colspan="7" style="color: var(--muted); text-align:center; padding:14px;">No transactions found for ${txnFilter}.</td></tr>`;
     return;
   }
-  const sorted = filtered
-    .map((tx, index) => {
-      // Find original index in transactions array for delete function
-      const originalIndex = transactions.findIndex(t => t === tx);
-      return { tx, index: originalIndex };
-    })
+
+  const sortedForDisplay = filtered
+    .map((tx, index) => ({ tx, originalIndex: transactions.indexOf(tx) }))
     .sort((a,b) => new Date(b.tx.date) - new Date(a.tx.date));
-  tbody.innerHTML = sorted.map(({ tx, index }) => {
-    const ticker = tx.ticker.toUpperCase();
+
+  tbody.innerHTML = sortedForDisplay.map(({ tx, originalIndex }) => {
+    const ticker = tx.ticker?.toUpperCase() || '—';
     const pd = priceData[ticker];
     let gainPctStr = '—';
-    if (pd && pd.price && tx.price > 0) {
-      const gainPct = ((pd.price - tx.price) / tx.price) * 100;
-      gainPctStr = `<span class="${colorClass(gainPct)}">${fmtSign(gainPct)}%</span>`;
+    
+    if (tx.action === 'buy') {
+      if (pd && pd.price && tx.price > 0) {
+        const currentGainPct = ((pd.price - tx.price) / tx.price) * 100;
+        gainPctStr = `<span class="${colorClass(currentGainPct)}">${fmtSign(currentGainPct)}%</span>`;
+      }
+    } else if (tx.action === 'sell') {
+      const realized = realizedPLMap.get(tx);
+      if (realized) {
+        gainPctStr = `<span class="${colorClass(realized.profitPct)}">${fmtSign(realized.profitPct)}%</span>`;
+      }
     }
+
     return `
       <tr>
         <td>${formatDate(tx.date)}</td>
@@ -1210,7 +1245,7 @@ function renderTransactions() {
         <td>${tx.shares}</td>
         <td>$${tx.price.toFixed(2)}</td>
         <td>${gainPctStr}</td>
-        <td><button class="tx-delete-btn" onclick="deleteTransaction(${index})">Delete</button></td>
+        <td><button class="tx-delete-btn" onclick="deleteTransaction(${originalIndex})">Delete</button></td>
       </tr>`;
   }).join('');
 }
@@ -1252,11 +1287,13 @@ function resetTransactions() {
 }
 
 function downloadTransactions() {
+  const activeP = portfolios.find(p => p.id === activePortfolioId);
+  const pName = activeP ? activeP.name.replace(/[^a-z0-9ก-๙]/gi, '_').toLowerCase() : 'portfolio';
   const data = JSON.stringify(transactions, null, 2);
   const blob = new Blob([data], { type: 'application/json' });
   const anchor = document.createElement('a');
   anchor.href = URL.createObjectURL(blob);
-  anchor.download = `portfolio-transactions-${new Date().toISOString().slice(0,10)}.json`;
+  anchor.download = `portfolio-${pName}-${new Date().toISOString().slice(0,10)}.json`;
   document.body.appendChild(anchor);
   anchor.click();
   document.body.removeChild(anchor);
@@ -1748,7 +1785,8 @@ function switchTab(view, el) {
   if (view === 'map') setTimeout(renderMap, 50);
 }
 function refreshPortfolio() {
-  PORTFOLIO = buildHoldingsFromTransactions();
+  const result = buildHoldingsFromTransactions();
+  PORTFOLIO = result.holdings;
   renderTransactions();
   renderTable();
   updateSummary();
