@@ -1809,33 +1809,34 @@ function openAvgCalculator() {
   let optionsHtml = tickers.map(t => `<option value="${t}">${t}</option>`).join('');
   
   const content = `
+    <div id="calc-base-info" style="padding:12px; background:rgba(59,130,246,0.05); border: 1px solid rgba(59,130,246,0.2); border-radius:8px; font-size:12px; margin-bottom:15px; color: var(--text);"></div>
+    
     <div style="display: flex; gap: 12px; margin-bottom: 15px; flex-wrap: wrap;">
       <div style="flex: 1; min-width: 140px;">
-        <label class="calc-row-label">Select Holding</label>
+        <label class="calc-row-label">Simulation Ticker</label>
         <select id="calc-ticker" class="calc-input" onchange="updateCalcBase()">
           ${optionsHtml}
         </select>
       </div>
       <div style="flex: 1; min-width: 100px;">
-        <label class="calc-row-label">Action</label>
+        <label class="calc-row-label">Sim Action</label>
         <select id="calc-action" class="calc-input" onchange="runAvgCalc()">
           <option value="buy">Buy More</option>
           <option value="sell">Sell Off</option>
         </select>
       </div>
       <div style="flex: 1; min-width: 140px;">
-        <label class="calc-row-label">Price ($)</label>
+        <label class="calc-row-label">Sim Price ($)</label>
         <input type="number" id="calc-buy-price" class="calc-input" placeholder="0.00" oninput="runAvgCalc()">
       </div>
     </div>
-    <div id="calc-base-info" style="padding:12px; background:rgba(59,130,246,0.05); border: 1px solid rgba(59,130,246,0.2); border-radius:8px; font-size:12px; margin-bottom:15px; color: var(--text);"></div>
     
     <div class="calc-table-wrap">
     <table class="calc-table">
       <thead>
         <tr>
-          <th>Amount ($)</th>
-          <th id="calc-col-qty">Add Qty</th>
+          <th>Sim Amount ($)</th>
+          <th id="calc-col-qty">Sim Qty</th>
           <th>New Avg</th>
           <th>New Wght</th>
         </tr>
@@ -1843,8 +1844,8 @@ function openAvgCalculator() {
       <tbody>
         ${Array(6).fill(0).map((_, i) => `
           <tr>
-            <td><input type="number" class="calc-input calc-amt" placeholder="Amount" oninput="runAvgCalc()"></td>
-            <td id="res-qty-${i}" class="calc-res-val">—</td>
+            <td><input type="number" class="calc-input calc-amt" data-idx="${i}" placeholder="Amount" oninput="runAvgCalc('amt', ${i})"></td>
+            <td><input type="number" class="calc-input calc-qty" data-idx="${i}" placeholder="Qty" oninput="runAvgCalc('qty', ${i})"></td>
             <td id="res-avg-${i}" class="calc-res-val">—</td>
             <td id="res-w-${i}" class="calc-res-val">—</td>
           </tr>
@@ -1866,6 +1867,7 @@ function updateCalcBase() {
   const ticker = document.getElementById('calc-ticker').value;
   const pos = PORTFOLIO.find(p => p.ticker === ticker);
   if (!pos) return;
+  
   const currentPrice = priceData[ticker]?.price || 0;
   document.getElementById('calc-buy-price').value = currentPrice ? currentPrice.toFixed(2) : "";
   
@@ -1876,65 +1878,81 @@ function updateCalcBase() {
   
   document.getElementById('calc-base-info').innerHTML = 
     `Current: <b>${pos.shares.toLocaleString()}</b> shares @ <b>$${pos.avgCost.toFixed(2)}</b> (Total: $${pos.totalCost.toLocaleString()}, Weight: <b>${currentWeight.toFixed(2)}%</b>)`;
+  
   runAvgCalc();
 }
 
-function runAvgCalc() {
+function runAvgCalc(triggeredBy, rowIdx) {
   const ticker = document.getElementById('calc-ticker').value;
   const action = document.getElementById('calc-action').value;
-  const price = parseFloat(document.getElementById('calc-buy-price').value);
+  const simPrice = parseFloat(document.getElementById('calc-buy-price').value);
   const pos = PORTFOLIO.find(p => p.ticker === ticker);
-  if (!pos || isNaN(price) || price <= 0) return;
+  if (!pos) return;
+
+  const baseShares = pos.shares;
+  const baseCost = pos.totalCost;
+  const baseAvg = pos.avgCost;
 
   const rows = PORTFOLIO.map(getRow);
   const totalMv = rows.reduce((sum, r) => sum + (r.marketValue || 0), 0);
-  const currentPrice = priceData[ticker]?.price || price;
-  const colQty = document.getElementById('calc-col-qty');
-  colQty.textContent = action === 'buy' ? 'Add Qty' : 'Sell Qty';
+  const currentTickerPrice = priceData[ticker]?.price || simPrice;
 
-  document.querySelectorAll('.calc-amt').forEach((inp, i) => {
-    const amt = parseFloat(inp.value);
-    const resQty = document.getElementById(`res-qty-${i}`);
+  const amts = document.querySelectorAll('.calc-amt');
+  const qtys = document.querySelectorAll('.calc-qty');
+
+  amts.forEach((amtInp, i) => {
+    const qtyInp = qtys[i];
     const resAvg = document.getElementById(`res-avg-${i}`);
     const resW = document.getElementById(`res-w-${i}`);
+    
+    if (triggeredBy && i === rowIdx) {
+      if (triggeredBy === 'amt') {
+        const val = parseFloat(amtInp.value);
+        if (!isNaN(val) && !isNaN(simPrice) && simPrice > 0) {
+          qtyInp.value = (val / simPrice).toFixed(2);
+        } else { qtyInp.value = ''; }
+      } else if (triggeredBy === 'qty') {
+        const val = parseFloat(qtyInp.value);
+        if (!isNaN(val) && !isNaN(simPrice) && simPrice > 0) {
+          amtInp.value = (val * simPrice).toFixed(2);
+        } else { amtInp.value = ''; }
+      }
+    }
 
-    if (!isNaN(amt) && amt > 0) {
-      const qtyChange = amt / price;
+    const amt = parseFloat(amtInp.value);
+    const qty = parseFloat(qtyInp.value);
+
+    if (!isNaN(amt) && !isNaN(qty) && amt > 0 && qty > 0) {
       let newTotalShares, newTotalCost, newMv;
 
       if (action === 'buy') {
-        newTotalShares = pos.shares + qtyChange;
-        newTotalCost = pos.totalCost + amt;
-        newMv = (pos.shares * currentPrice) + (qtyChange * currentPrice);
-        const newAvg = newTotalCost / newTotalShares;
-        const newWeight = (newMv / (totalMv + (qtyChange * currentPrice))) * 100;
+        newTotalShares = baseShares + qty;
+        newTotalCost = baseCost + amt;
+        newMv = (baseShares * currentTickerPrice) + (qty * currentTickerPrice);
+        const newAvgVal = newTotalCost / newTotalShares;
+        const newWeight = (newMv / (totalMv + (qty * currentTickerPrice))) * 100;
 
-        resQty.textContent = qtyChange.toFixed(2);
-        resAvg.textContent = '$' + newAvg.toFixed(2);
+        resAvg.textContent = '$' + newAvgVal.toFixed(2);
         resAvg.style.color = '';
         resW.textContent = newWeight.toFixed(2) + '%';
       } else {
-        // Sell logic: In FIFO/Average cost basis, selling shares doesn't change the average cost of remaining shares
-        // but it changes the total weight and total shares.
-        newTotalShares = pos.shares - qtyChange;
+        newTotalShares = baseShares - qty;
         if (newTotalShares < 0) {
-          resQty.textContent = 'Exceeds';
-          resAvg.textContent = '—';
+          resAvg.textContent = 'Exceeds';
           resW.textContent = '—';
           return;
         }
         
-        newMv = newTotalShares * currentPrice;
-        const newTotalMv = totalMv - (qtyChange * currentPrice);
+        newMv = newTotalShares * currentTickerPrice;
+        const newTotalMv = totalMv - (qty * currentTickerPrice);
         const newWeight = newTotalMv > 0 ? (newMv / newTotalMv) * 100 : 0;
 
-        resQty.textContent = qtyChange.toFixed(2);
-        resAvg.textContent = '$' + pos.avgCost.toFixed(2);
-        resAvg.style.color = 'var(--muted)'; // Average cost doesn't change on sell
+        resAvg.textContent = '$' + baseAvg.toFixed(2);
+        resAvg.style.color = 'var(--muted)';
         resW.textContent = newWeight.toFixed(2) + '%';
       }
     } else {
-      resQty.textContent = resAvg.textContent = resW.textContent = '—';
+      resAvg.textContent = resW.textContent = '—';
       resAvg.style.color = '';
     }
   });
