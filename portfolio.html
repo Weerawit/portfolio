@@ -749,7 +749,7 @@
       <label>Price<input type="number" id="txn-price" min="0" step="0.01"></label>
       <label>&nbsp;</label>
       <button class="btn btn-primary" onclick="addTransaction()">Add transaction</button>
-      <button class="btn" onclick="resetTransactions()">Reset</button>
+      <button class="btn" onclick="clearForm()">Clear Form</button>
     </div>
   </div>
   <div class="transaction-panel">
@@ -1251,6 +1251,7 @@ function renderTransactions() {
 }
 function deleteTransaction(index) {
   if (index < 0 || index >= transactions.length) return;
+  if (!confirm(`Are you sure you want to delete this transaction for ${transactions[index].ticker}?`)) return;
   transactions.splice(index, 1);
   saveTransactions();
   refreshPortfolio();
@@ -1274,11 +1275,7 @@ function addTransaction() {
   document.getElementById('txn-shares').value = '';
   document.getElementById('txn-price').value = '';
 }
-function resetTransactions() {
-  // if (!confirm('Reset portfolio to the default sample transactions?')) return;
-  // transactions = DEFAULT_TRANSACTIONS.slice();
-  // saveTransactions();
-  // refreshPortfolio();
+function clearForm() {
   setTodayDate();
   document.getElementById('txn-ticker').value = '';
   document.getElementById('txn-action').value = 'buy';
@@ -1432,15 +1429,15 @@ function getRow(p) {
   const pd = priceData[p.ticker];
   const price = pd?.price;
   const changePct = pd?.changePct;
-  const changeD = pd?.changeD;
+  const priceChange = pd?.changeD;
   const marketCap = pd?.marketCap || null;
   const industry = pd?.industry || p.industry;
   const name = pd?.name || p.name;
-  const mv = price !== undefined ? price * p.shares : null;
-  const gainD = mv !== null ? mv - p.totalCost : null;
+  const marketValue = price !== undefined ? price * p.shares : null;
+  const gainD = marketValue !== null ? marketValue - p.totalCost : null;
   const gainPct = gainD !== null && p.totalCost ? (gainD / p.totalCost) * 100 : null;
-  const dayChange = changeD !== undefined ? changeD * p.shares : null;
-  return { ...p, name, industry, price, changePct, changeD, marketCap, mv, gainD, gainPct, dayChange };
+  const changeD = priceChange !== undefined ? priceChange * p.shares : null;
+  return { ...p, name, industry, price, changePct, marketValue, gainD, gainPct, changeD, marketCap };
 }
 function sortTable(col) {
   if (sortCol === col) sortAsc = !sortAsc;
@@ -1453,9 +1450,9 @@ function sortTable(col) {
 }
 function renderTable() {
   const rows = PORTFOLIO.map(getRow);
-  const totalMv = rows.reduce((sum, row) => sum + (row.mv || 0), 0);
+  const totalMv = rows.reduce((sum, row) => sum + (row.marketValue || 0), 0);
   rows.forEach(row => {
-    row.portfolioPct = row.mv !== null && totalMv > 0 ? (row.mv / totalMv) * 100 : null;
+    row.portfolioPct = row.marketValue !== null && totalMv > 0 ? (row.marketValue / totalMv) * 100 : null;
   });
   rows.sort((a, b) => {
     let av = a[sortCol], bv = b[sortCol];
@@ -1471,10 +1468,10 @@ function renderTable() {
     const cpStr = r.changePct !== undefined
       ? `<span class="${r.changePct >= 0 ? 'tag-gain':'tag-loss'}">${fmtSign(r.changePct)}%</span>`
       : '<span class="loading-price">…</span>';
-    const mvStr = r.mv !== null ? `$${r.mv.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})}` : '—';
+    const mvStr = r.marketValue !== null ? `$${r.marketValue.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})}` : '—';
     const gainDStr = r.gainD !== null ? `<span class="${colorClass(r.gainD)}">${r.gainD >= 0?'+':''}$${Math.abs(r.gainD).toFixed(2)}</span>` : '—';
     const gainPctStr = r.gainPct !== null ? `<span class="${colorClass(r.gainPct)}">${fmtSign(r.gainPct)}%</span>` : '—';
-    const dayStr = r.dayChange !== null ? `<span class="${colorClass(r.dayChange)}">${r.dayChange >= 0?'+':''}$${Math.abs(r.dayChange).toFixed(2)}</span>` : '—';
+    const dayStr = r.changeD !== null ? `<span class="${colorClass(r.changeD)}">${r.changeD >= 0?'+':''}$${Math.abs(r.changeD).toFixed(2)}</span>` : '—';
     return `<tr>
       <td><div class="ticker-cell"><span class="tick-badge" 
         onclick="setTxnFilter('${r.ticker}')" 
@@ -1497,10 +1494,10 @@ function renderTable() {
 }
 function renderFooter(rows) {
   const totalCost = rows.reduce((s,r) => s + r.totalCost, 0);
-  const totalMV = rows.reduce((s,r) => s + (r.mv || r.totalCost), 0);
+  const totalMV = rows.reduce((s,r) => s + (r.marketValue || r.totalCost), 0);
   const totalGainD = totalMV - totalCost;
   const totalGainPct = totalCost ? (totalGainD / totalCost) * 100 : 0;
-  const totalDayChange = rows.reduce((s,r) => s + (r.dayChange || 0), 0);
+  const totalDayChange = rows.reduce((s,r) => s + (r.changeD || 0), 0);
   const totalDayPct = totalMV - totalDayChange ? (totalDayChange / (totalMV - totalDayChange)) * 100 : 0;
   document.getElementById('portfolio-tfoot').innerHTML = `<tr>
     <td colspan="2">Summary: ${rows.length} Tickers</td>
@@ -1518,10 +1515,10 @@ function renderFooter(rows) {
 function updateSummary() {
   const rows = PORTFOLIO.map(getRow);
   const totalCost = rows.reduce((s,r) => s + r.totalCost, 0);
-  const totalMV = rows.reduce((s,r) => s + (r.mv || r.totalCost), 0);
+  const totalMV = rows.reduce((s,r) => s + (r.marketValue || r.totalCost), 0);
   const totalGainD = totalMV - totalCost;
   const totalGainPct = totalCost ? (totalGainD / totalCost) * 100 : 0;
-  const totalDayChange = rows.reduce((s,r) => s + (r.dayChange || 0), 0);
+  const totalDayChange = rows.reduce((s,r) => s + (r.changeD || 0), 0);
   const totalDayPct = totalMV - totalDayChange ? (totalDayChange / (totalMV - totalDayChange)) * 100 : 0;
   document.getElementById('sum-total-cost').textContent = '$' + totalCost.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
   document.getElementById('sum-total-sub').textContent = `${rows.length} positions · ${transactions.length} transactions`;
@@ -1553,7 +1550,7 @@ function updateSummary() {
 
   // Update Document Title
   const emoji = totalDayChange >= 0 ? '🟢' : '🔴';
-  const sign = totalDayChange >= 0 ? '+' : '';
+  const sign = totalDayChange >= 0 ? '+' : '-';
   const spxStr = (spx && spx.changePct !== undefined) ? ` | SPX ${fmtSign(spx.changePct)}%` : '';
   
   currentTitleBase = `${emoji} ${sign}$${Math.abs(totalDayChange).toLocaleString(undefined, {maximumFractionDigits:0})} (${fmtSign(totalDayPct)}%)${spxStr}`;
@@ -1718,7 +1715,7 @@ function renderMapPane(container, items, title) {
         document.getElementById('tt-name').textContent = cell.name;
         document.getElementById('tt-price').textContent = cell.price !== undefined ? '$' + cell.price.toFixed(2) : '—';
         document.getElementById('tt-chgpct').innerHTML = cell.changePct !== undefined ? `<span class="${colorClass(cell.changePct)}">${fmtSign(cell.changePct)}%</span>` : '—';
-        document.getElementById('tt-mv').textContent = cell.mv !== null ? '$' + cell.mv.toLocaleString('en-US',{maximumFractionDigits:0}) : '—';
+        document.getElementById('tt-mv').textContent = cell.marketValue !== null ? '$' + cell.marketValue.toLocaleString('en-US',{maximumFractionDigits:0}) : '—';
         document.getElementById('tt-gp').innerHTML = cell.gainPct !== null ? `<span class="${colorClass(cell.gainPct)}">${fmtSign(cell.gainPct)}%</span>` : '—';
       });
       div.addEventListener('mouseleave', () => {
@@ -1734,13 +1731,13 @@ function renderMap() {
   const losersContainer = document.getElementById('treemap-losers');
   gainersContainer.innerHTML = '';
   losersContainer.innerHTML = '';
-  const rows = PORTFOLIO.map(getRow).filter(r => r.mv !== null && r.mv > 0);
+  const rows = PORTFOLIO.map(getRow).filter(r => r.marketValue !== null && r.marketValue > 0);
   if (!rows.length) {
     gainersContainer.innerHTML = '<div class="pane-empty">Add transactions to build the portfolio map.</div>';
     losersContainer.innerHTML = '<div class="pane-empty">Add transactions to build the portfolio map.</div>';
     return;
   }
-  const items = rows.map(r => ({ ...r, value: Math.max(r.mv || 1, 1) }));
+  const items = rows.map(r => ({ ...r, value: Math.max(r.marketValue || 1, 1) }));
   const key = colorMode === 'day' ? 'changePct' : 'gainPct';
   const gainers = items.filter(r => (r[key] || 0) >= 0).sort((a,b) => b.value - a.value);
   const losers = items.filter(r => (r[key] || 0) < 0).sort((a,b) => b.value - a.value);
@@ -1866,7 +1863,7 @@ function updateCalcBase() {
   document.getElementById('calc-buy-price').value = currentPrice ? currentPrice.toFixed(2) : "";
   
   const rows = PORTFOLIO.map(getRow);
-  const totalMv = rows.reduce((sum, r) => sum + (r.mv || 0), 0);
+  const totalMv = rows.reduce((sum, r) => sum + (r.marketValue || 0), 0);
   const currentMv = currentPrice * pos.shares;
   const currentWeight = totalMv > 0 ? (currentMv / totalMv) * 100 : 0;
   
@@ -1882,7 +1879,7 @@ function runAvgCalc() {
   if (!pos || isNaN(buyPrice) || buyPrice <= 0) return;
 
   const rows = PORTFOLIO.map(getRow);
-  const totalMv = rows.reduce((sum, r) => sum + (r.mv || 0), 0);
+  const totalMv = rows.reduce((sum, r) => sum + (r.marketValue || 0), 0);
   const currentPrice = priceData[ticker]?.price || buyPrice;
 
   document.querySelectorAll('.calc-amt').forEach((inp, i) => {
