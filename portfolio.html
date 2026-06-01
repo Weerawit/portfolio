@@ -1809,15 +1809,22 @@ function openAvgCalculator() {
   let optionsHtml = tickers.map(t => `<option value="${t}">${t}</option>`).join('');
   
   const content = `
-    <div style="display: flex; gap: 12px; margin-bottom: 15px;">
-      <div style="flex: 1;">
+    <div style="display: flex; gap: 12px; margin-bottom: 15px; flex-wrap: wrap;">
+      <div style="flex: 1; min-width: 140px;">
         <label class="calc-row-label">Select Holding</label>
         <select id="calc-ticker" class="calc-input" onchange="updateCalcBase()">
           ${optionsHtml}
         </select>
       </div>
-      <div style="flex: 1;">
-        <label class="calc-row-label">Price to Buy ($)</label>
+      <div style="flex: 1; min-width: 100px;">
+        <label class="calc-row-label">Action</label>
+        <select id="calc-action" class="calc-input" onchange="runAvgCalc()">
+          <option value="buy">Buy More</option>
+          <option value="sell">Sell Off</option>
+        </select>
+      </div>
+      <div style="flex: 1; min-width: 140px;">
+        <label class="calc-row-label">Price ($)</label>
         <input type="number" id="calc-buy-price" class="calc-input" placeholder="0.00" oninput="runAvgCalc()">
       </div>
     </div>
@@ -1828,7 +1835,7 @@ function openAvgCalculator() {
       <thead>
         <tr>
           <th>Amount ($)</th>
-          <th>Add Qty</th>
+          <th id="calc-col-qty">Add Qty</th>
           <th>New Avg</th>
           <th>New Wght</th>
         </tr>
@@ -1874,13 +1881,16 @@ function updateCalcBase() {
 
 function runAvgCalc() {
   const ticker = document.getElementById('calc-ticker').value;
-  const buyPrice = parseFloat(document.getElementById('calc-buy-price').value);
+  const action = document.getElementById('calc-action').value;
+  const price = parseFloat(document.getElementById('calc-buy-price').value);
   const pos = PORTFOLIO.find(p => p.ticker === ticker);
-  if (!pos || isNaN(buyPrice) || buyPrice <= 0) return;
+  if (!pos || isNaN(price) || price <= 0) return;
 
   const rows = PORTFOLIO.map(getRow);
   const totalMv = rows.reduce((sum, r) => sum + (r.marketValue || 0), 0);
-  const currentPrice = priceData[ticker]?.price || buyPrice;
+  const currentPrice = priceData[ticker]?.price || price;
+  const colQty = document.getElementById('calc-col-qty');
+  colQty.textContent = action === 'buy' ? 'Add Qty' : 'Sell Qty';
 
   document.querySelectorAll('.calc-amt').forEach((inp, i) => {
     const amt = parseFloat(inp.value);
@@ -1889,16 +1899,43 @@ function runAvgCalc() {
     const resW = document.getElementById(`res-w-${i}`);
 
     if (!isNaN(amt) && amt > 0) {
-      const addQty = amt / buyPrice;
-      const newTotalShares = pos.shares + addQty;
-      const newAvg = (pos.totalCost + amt) / newTotalShares;
-      const newWeight = (((pos.shares * currentPrice) + amt) / (totalMv + amt)) * 100;
+      const qtyChange = amt / price;
+      let newTotalShares, newTotalCost, newMv;
 
-      resQty.textContent = addQty.toFixed(2);
-      resAvg.textContent = '$' + newAvg.toFixed(2);
-      resW.textContent = newWeight.toFixed(2) + '%';
+      if (action === 'buy') {
+        newTotalShares = pos.shares + qtyChange;
+        newTotalCost = pos.totalCost + amt;
+        newMv = (pos.shares * currentPrice) + (qtyChange * currentPrice);
+        const newAvg = newTotalCost / newTotalShares;
+        const newWeight = (newMv / (totalMv + (qtyChange * currentPrice))) * 100;
+
+        resQty.textContent = qtyChange.toFixed(2);
+        resAvg.textContent = '$' + newAvg.toFixed(2);
+        resAvg.style.color = '';
+        resW.textContent = newWeight.toFixed(2) + '%';
+      } else {
+        // Sell logic: In FIFO/Average cost basis, selling shares doesn't change the average cost of remaining shares
+        // but it changes the total weight and total shares.
+        newTotalShares = pos.shares - qtyChange;
+        if (newTotalShares < 0) {
+          resQty.textContent = 'Exceeds';
+          resAvg.textContent = '—';
+          resW.textContent = '—';
+          return;
+        }
+        
+        newMv = newTotalShares * currentPrice;
+        const newTotalMv = totalMv - (qtyChange * currentPrice);
+        const newWeight = newTotalMv > 0 ? (newMv / newTotalMv) * 100 : 0;
+
+        resQty.textContent = qtyChange.toFixed(2);
+        resAvg.textContent = '$' + pos.avgCost.toFixed(2);
+        resAvg.style.color = 'var(--muted)'; // Average cost doesn't change on sell
+        resW.textContent = newWeight.toFixed(2) + '%';
+      }
     } else {
       resQty.textContent = resAvg.textContent = resW.textContent = '—';
+      resAvg.style.color = '';
     }
   });
 }
