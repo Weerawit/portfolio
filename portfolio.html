@@ -687,6 +687,10 @@
   </div>
   <div class="header-stats">
     <div class="hstat">
+      <span class="hstat-label">Net Worth</span>
+      <span class="hstat-val" id="hdr-nw">—</span>
+    </div>
+    <div class="hstat">
       <span class="hstat-label">Market Value</span>
       <span class="hstat-val" id="hdr-mv">—</span>
     </div>
@@ -712,9 +716,17 @@
 
 <div class="summary-bar">
   <div class="sum-card">
-    <div class="sum-label">Total Cost</div>
-    <div class="sum-val" id="sum-total-cost">$76,710</div>
-    <div class="sum-sub neutral" id="sum-total-sub">23 positions · 27 transactions</div>
+    <div class="sum-label">Net Worth</div>
+    <div class="sum-val" id="sum-nw">—</div>
+    <div class="sum-sub neutral" id="sum-nw-sub">Total Value</div>
+  </div>
+  <div class="sum-card">
+    <div class="sum-label" style="display:flex; justify-content:space-between; align-items:center;">
+      <span>Cash Balance</span>
+      <button class="btn" style="padding: 1px 6px; font-size: 9px; height: 18px; line-height: 1;" onclick="reconcileCash()">Reconcile</button>
+    </div>
+    <div class="sum-val" id="sum-cash">—</div>
+    <div class="sum-sub neutral" id="sum-cash-pct">0.00% of port</div>
   </div>
   <div class="sum-card">
     <div class="sum-label">Market Value</div>
@@ -740,9 +752,11 @@
       <label>Date<input type="date" id="txn-date"></label>
       <label>Ticker<input type="text" id="txn-ticker" placeholder="AAPL"></label>
       <label>Action
-        <select id="txn-action">
+        <select id="txn-action" onchange="toggleTxnFields()">
           <option value="buy">Buy</option>
           <option value="sell">Sell</option>
+          <option value="deposit">Deposit Cash</option>
+          <option value="withdraw">Withdraw Cash</option>
         </select>
       </label>
       <label>Shares<input type="number" id="txn-shares" min="0.01" step="0.01"></label>
@@ -862,6 +876,7 @@ let currentTitleBase = '';
 let titleDotActive = true;
 let transactions = [];
 let PORTFOLIO = [];
+let CASH_BALANCE = 0;
 let priceData = {};
 let sortCol = 'marketValue';
 let sortAsc = false;
@@ -1136,11 +1151,24 @@ function formatDate(dateStr) {
 function buildHoldingsFromTransactions() {
   const buckets = {};
   const realizedPLMap = new Map();
+  let cashBalance = 0;
+  
   // Use a sorted copy to ensure FIFO matches chronological order
   const sorted = [...transactions].sort((a,b) => new Date(a.date) - new Date(b.date));
   
   sorted.forEach(tx => {
     const ticker = tx.ticker?.trim().toUpperCase();
+    
+    // Handle Cash flow
+    if (tx.action === 'deposit') {
+      cashBalance += tx.price;
+      return;
+    }
+    if (tx.action === 'withdraw') {
+      cashBalance -= tx.price;
+      return;
+    }
+
     if (!ticker || !tx.shares || tx.shares <= 0) return;
     
     if (!buckets[ticker]) {
@@ -1150,8 +1178,13 @@ function buildHoldingsFromTransactions() {
     const entry = buckets[ticker];
     
     if (tx.action === 'buy') {
+      const cost = tx.shares * tx.price;
+      cashBalance -= cost;
       entry.lots.push({ shares: tx.shares, costPerShare: tx.price });
     } else if (tx.action === 'sell') {
+      const proceeds = tx.shares * tx.price;
+      cashBalance += proceeds;
+      
       let remaining = tx.shares;
       let totalCost = 0;
       let sharesSold = 0;
@@ -1172,7 +1205,6 @@ function buildHoldingsFromTransactions() {
       }
       
       if (sharesSold > 0) {
-        const proceeds = sharesSold * tx.price;
         const profit = proceeds - totalCost;
         const profitPct = (profit / totalCost) * 100;
         realizedPLMap.set(tx, { profit, profitPct });
@@ -1193,7 +1225,7 @@ function buildHoldingsFromTransactions() {
     };
   }).filter(item => item.shares > 0);
   
-  return { holdings, realizedPLMap };
+  return { holdings, realizedPLMap, cashBalance };
 }
 
 function renderTransactions() {
@@ -1224,25 +1256,32 @@ function renderTransactions() {
     const ticker = tx.ticker?.toUpperCase() || '—';
     const pd = priceData[ticker];
     let gainPctStr = '—';
+    let actionBadge = '';
     
     if (tx.action === 'buy') {
+      actionBadge = '<span class="tag-gain">Buy</span>';
       if (pd && pd.price && tx.price > 0) {
         const currentGainPct = ((pd.price - tx.price) / tx.price) * 100;
         gainPctStr = `<span class="${colorClass(currentGainPct)}">${fmtSign(currentGainPct)}%</span>`;
       }
     } else if (tx.action === 'sell') {
+      actionBadge = '<span class="tag-loss">Sell</span>';
       const realized = realizedPLMap.get(tx);
       if (realized) {
         gainPctStr = `<span class="${colorClass(realized.profitPct)}">${fmtSign(realized.profitPct)}%</span>`;
       }
+    } else if (tx.action === 'deposit') {
+      actionBadge = '<span style="background:var(--gain-dim); color:var(--gain); padding:2px 7px; border-radius:4px; font-size:11px;">Deposit</span>';
+    } else if (tx.action === 'withdraw') {
+      actionBadge = '<span style="background:var(--loss-dim); color:var(--loss); padding:2px 7px; border-radius:4px; font-size:11px;">Withdraw</span>';
     }
 
     return `
       <tr>
         <td>${formatDate(tx.date)}</td>
         <td>${ticker}</td>
-        <td>${tx.action === 'buy' ? '<span class="tag-gain">Buy</span>' : '<span class="tag-loss">Sell</span>'}</td>
-        <td>${tx.shares}</td>
+        <td>${actionBadge}</td>
+        <td>${tx.shares || '—'}</td>
         <td>$${tx.price.toFixed(2)}</td>
         <td>${gainPctStr}</td>
         <td><button class="tx-delete-btn" onclick="deleteTransaction(${originalIndex})">Delete</button></td>
@@ -1258,28 +1297,58 @@ function deleteTransaction(index) {
 }
 function addTransaction() {
   const date = document.getElementById('txn-date').value;
-  const ticker = document.getElementById('txn-ticker').value.trim().toUpperCase();
+  let ticker = document.getElementById('txn-ticker').value.trim().toUpperCase();
   const action = document.getElementById('txn-action').value;
-  const shares = parseFloat(document.getElementById('txn-shares').value);
+  let shares = parseFloat(document.getElementById('txn-shares').value);
   const price = parseFloat(document.getElementById('txn-price').value);
-  if (!date || !ticker || isNaN(shares) || shares <= 0 || isNaN(price) || price < 0) {
-    showAlert('Please enter valid transaction details.');
-    return;
+
+  if (action === 'deposit' || action === 'withdraw') {
+    ticker = 'CASH';
+    shares = 1;
+    if (!date || isNaN(price) || price < 0) {
+      showAlert('Please enter valid date and amount.');
+      return;
+    }
+  } else {
+    if (!date || !ticker || isNaN(shares) || shares <= 0 || isNaN(price) || price < 0) {
+      showAlert('Please enter valid transaction details.');
+      return;
+    }
   }
+
   transactions.push({ date, ticker, action, shares, price });
   saveTransactions();
   refreshPortfolio();
-  setTodayDate();
-  document.getElementById('txn-ticker').value = '';
-  document.getElementById('txn-action').value = 'buy';
-  document.getElementById('txn-shares').value = '';
-  document.getElementById('txn-price').value = '';
+  clearForm();
+}
+
+function toggleTxnFields() {
+  const action = document.getElementById('txn-action').value;
+  const tickerInp = document.getElementById('txn-ticker');
+  const sharesInp = document.getElementById('txn-shares');
+  
+  if (action === 'deposit' || action === 'withdraw') {
+    tickerInp.value = 'CASH';
+    tickerInp.disabled = true;
+    sharesInp.value = '1';
+    sharesInp.disabled = true;
+  } else {
+    if (tickerInp.value === 'CASH') tickerInp.value = '';
+    tickerInp.disabled = false;
+    sharesInp.disabled = false;
+  }
 }
 function clearForm() {
   setTodayDate();
-  document.getElementById('txn-ticker').value = '';
-  document.getElementById('txn-action').value = 'buy';
-  document.getElementById('txn-shares').value = '';
+  const tickerInp = document.getElementById('txn-ticker');
+  const sharesInp = document.getElementById('txn-shares');
+  const actionInp = document.getElementById('txn-action');
+  
+  tickerInp.value = '';
+  tickerInp.disabled = false;
+  sharesInp.value = '';
+  sharesInp.disabled = false;
+  actionInp.value = 'buy';
   document.getElementById('txn-price').value = '';
 }
 
@@ -1513,26 +1582,36 @@ function renderFooter(rows) {
   </tr>`;
 }
 function updateSummary() {
-  const rows = PORTFOLIO.map(getRow);
-  const totalCost = rows.reduce((s,r) => s + r.totalCost, 0);
-  const totalMV = rows.reduce((s,r) => s + (r.marketValue || r.totalCost), 0);
-  const totalGainD = totalMV - totalCost;
+  const stockRows = PORTFOLIO.map(getRow);
+  const totalCost = stockRows.reduce((s,r) => s + r.totalCost, 0);
+  const marketValue = stockRows.reduce((s,r) => s + (r.marketValue || r.totalCost), 0);
+  const netWorth = marketValue + CASH_BALANCE;
+  
+  const totalGainD = marketValue - totalCost;
   const totalGainPct = totalCost ? (totalGainD / totalCost) * 100 : 0;
-  const totalDayChange = rows.reduce((s,r) => s + (r.changeD || 0), 0);
-  const totalDayPct = totalMV - totalDayChange ? (totalDayChange / (totalMV - totalDayChange)) * 100 : 0;
-  document.getElementById('sum-total-cost').textContent = '$' + totalCost.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
-  document.getElementById('sum-total-sub').textContent = `${rows.length} positions · ${transactions.length} transactions`;
-  document.getElementById('sum-mv').textContent = '$' + totalMV.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
-  document.getElementById('sum-mv-sub').textContent = `vs $${totalCost.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})} cost`;
+  const totalDayChange = stockRows.reduce((s,r) => s + (r.changeD || 0), 0);
+  const totalDayPct = marketValue - totalDayChange ? (totalDayChange / (marketValue - totalDayChange)) * 100 : 0;
+  const cashPct = netWorth > 0 ? (CASH_BALANCE / netWorth) * 100 : 0;
+
+  document.getElementById('sum-nw').textContent = '$' + netWorth.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
+  document.getElementById('sum-cash').textContent = '$' + CASH_BALANCE.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
+  document.getElementById('sum-cash-pct').textContent = `${cashPct.toFixed(2)}% of port`;
+  
+  document.getElementById('sum-mv').textContent = '$' + marketValue.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
+  document.getElementById('sum-mv-sub').textContent = `${stockRows.length} positions · ${transactions.length} txns`;
+  
   document.getElementById('sum-gain-d').className = 'sum-val ' + colorClass(totalGainD);
   document.getElementById('sum-gain-d').textContent = (totalGainD >= 0 ? '+' : '') + fmtMoney(totalGainD);
   document.getElementById('sum-gain-pct').className = 'sum-sub ' + colorClass(totalGainPct);
   document.getElementById('sum-gain-pct').textContent = fmtSign(totalGainPct) + '%';
+  
   document.getElementById('sum-day-d').className = 'sum-val ' + colorClass(totalDayChange);
   document.getElementById('sum-day-d').textContent = (totalDayChange >= 0 ? '+' : '') + fmtMoney(totalDayChange);
   document.getElementById('sum-day-pct').className = 'sum-sub ' + colorClass(totalDayPct);
   document.getElementById('sum-day-pct').textContent = fmtSign(totalDayPct) + '%';
-  document.getElementById('hdr-mv').textContent = '$' + (totalMV / 1000).toFixed(1) + 'K';
+  
+  document.getElementById('hdr-nw').textContent = '$' + (netWorth / 1000).toFixed(1) + 'K';
+  document.getElementById('hdr-mv').textContent = '$' + (marketValue / 1000).toFixed(1) + 'K';
   document.getElementById('hdr-gain').className = 'hstat-val ' + colorClass(totalGainD);
   document.getElementById('hdr-gain').textContent = (totalGainD >= 0 ? '+' : '') + '$' + Math.abs(totalGainD).toFixed(0);
   document.getElementById('hdr-day').className = 'hstat-val ' + colorClass(totalDayPct);
@@ -1553,7 +1632,7 @@ function updateSummary() {
   const sign = totalDayChange >= 0 ? '+' : '-';
   const spxStr = (spx && spx.changePct !== undefined) ? ` | SPX ${fmtSign(spx.changePct)}%` : '';
   
-  currentTitleBase = `${emoji} ${sign}$${Math.abs(totalDayChange).toLocaleString(undefined, {maximumFractionDigits:0})} (${fmtSign(totalDayPct)}%)${spxStr}`;
+  currentTitleBase = emoji + " " + sign + "$" + Math.abs(totalDayChange).toLocaleString(undefined, {maximumFractionDigits:0}) + " (" + fmtSign(totalDayPct) + "%)" + spxStr;
   updateFullTitle();
 }
 
@@ -1732,6 +1811,22 @@ function renderMap() {
   gainersContainer.innerHTML = '';
   losersContainer.innerHTML = '';
   const rows = PORTFOLIO.map(getRow).filter(r => r.marketValue !== null && r.marketValue > 0);
+  
+  // Add Cash to Map
+  if (CASH_BALANCE > 0) {
+    rows.push({
+      ticker: 'CASH',
+      name: 'Cash Balance',
+      industry: 'Cash',
+      marketValue: CASH_BALANCE,
+      value: CASH_BALANCE,
+      changePct: 0,
+      gainPct: 0,
+      price: 1,
+      isCash: true
+    });
+  }
+
   if (!rows.length) {
     gainersContainer.innerHTML = '<div class="pane-empty">Add transactions to build the portfolio map.</div>';
     losersContainer.innerHTML = '<div class="pane-empty">Add transactions to build the portfolio map.</div>';
@@ -1751,7 +1846,7 @@ function renderMap() {
   } else {
     wrapper.style.gridTemplateColumns = '1fr';
   }
-  renderMapPane(gainersContainer, gainers, `Gainers (${((gainerWeight / (gainerWeight + loserWeight)) * 100 || 0).toFixed(1)}%)`);
+  renderMapPane(gainersContainer, gainers, `Gainers/Cash (${((gainerWeight / (gainerWeight + loserWeight)) * 100 || 0).toFixed(1)}%)`);
   renderMapPane(losersContainer, losers, `Losers (${((loserWeight / (gainerWeight + loserWeight)) * 100 || 0).toFixed(1)}%)`);
 
   // Update Legend labels
@@ -1784,11 +1879,45 @@ function switchTab(view, el) {
 function refreshPortfolio() {
   const result = buildHoldingsFromTransactions();
   PORTFOLIO = result.holdings;
+  CASH_BALANCE = result.cashBalance;
   renderTransactions();
   renderTable();
   updateSummary();
   renderMap();
 }
+async function reconcileCash() {
+  const currentActual = prompt("Enter your actual current cash balance (e.g. from your broker account):", CASH_BALANCE.toFixed(2));
+  if (currentActual === null || currentActual.trim() === "" || isNaN(currentActual)) return;
+  
+  const target = parseFloat(currentActual);
+  const diff = target - CASH_BALANCE;
+  
+  if (Math.abs(diff) < 0.01) {
+    showAlert("Cash balance is already correct.");
+    return;
+  }
+  
+  const action = diff > 0 ? 'deposit' : 'withdraw';
+  const amount = Math.abs(diff);
+  const date = new Date().toISOString().split('T')[0];
+  
+  const confirmed = await showConfirm(`Create a ${action} of $${amount.toLocaleString()} to adjust cash balance to $${target.toLocaleString()}?`);
+  if (!confirmed) return;
+  
+  transactions.push({
+    date,
+    ticker: 'CASH',
+    action,
+    shares: 1,
+    price: amount,
+    note: 'Reconciliation adjustment'
+  });
+  
+  saveTransactions();
+  refreshPortfolio();
+  showAlert(`Cash balance updated to $${target.toLocaleString()}`);
+}
+
 function setTodayDate() {
   document.getElementById('txn-date').value = new Date().toISOString().split('T')[0];
 }
