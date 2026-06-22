@@ -748,6 +748,11 @@
     <div class="sum-sub" id="sum-gain-pct">—</div>
   </div>
   <div class="sum-card">
+    <div class="sum-label">Realized Gain</div>
+    <div class="sum-val" id="sum-realized-d">—</div>
+    <div class="sum-sub" id="sum-realized-pct">—</div>
+  </div>
+  <div class="sum-card">
     <div class="sum-label">Day Change</div>
     <div class="sum-val" id="sum-day-d">—</div>
     <div class="sum-sub" id="sum-day-pct">—</div>
@@ -886,6 +891,7 @@ let titleDotActive = true;
 let transactions = [];
 let PORTFOLIO = [];
 let CASH_BALANCE = 0;
+let REALIZED_PL_MAP = new Map();
 let priceData = {};
 let sortCol = 'marketValue';
 let sortAsc = false;
@@ -1624,6 +1630,16 @@ function updateSummary() {
   const totalDayPct = marketValue - totalDayChange ? (totalDayChange / (marketValue - totalDayChange)) * 100 : 0;
   const cashPct = netWorth > 0 ? (CASH_BALANCE / netWorth) * 100 : 0;
 
+  // Calculate Realized Gain
+  let totalRealizedGain = 0;
+  let totalRealizedCost = 0;
+  REALIZED_PL_MAP.forEach((val, tx) => {
+    totalRealizedGain += val.profit;
+    const proceeds = tx.shares * tx.price;
+    totalRealizedCost += (proceeds - val.profit);
+  });
+  const realizedGainPct = totalRealizedCost ? (totalRealizedGain / totalRealizedCost) * 100 : 0;
+
   document.getElementById('sum-nw').textContent = '$' + netWorth.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
   document.getElementById('sum-cash').textContent = '$' + CASH_BALANCE.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
   document.getElementById('sum-cash-pct').textContent = `${cashPct.toFixed(2)}% of port`;
@@ -1635,6 +1651,12 @@ function updateSummary() {
   document.getElementById('sum-gain-d').textContent = (totalGainD >= 0 ? '+' : '') + fmtMoney(totalGainD);
   document.getElementById('sum-gain-pct').className = 'sum-sub ' + colorClass(totalGainPct);
   document.getElementById('sum-gain-pct').textContent = fmtSign(totalGainPct) + '%';
+
+  // Update Realized Gain UI
+  document.getElementById('sum-realized-d').className = 'sum-val ' + colorClass(totalRealizedGain);
+  document.getElementById('sum-realized-d').textContent = (totalRealizedGain >= 0 ? '+' : '') + fmtMoney(totalRealizedGain);
+  document.getElementById('sum-realized-pct').className = 'sum-sub ' + colorClass(realizedGainPct);
+  document.getElementById('sum-realized-pct').textContent = fmtSign(realizedGainPct) + '%';
   
   document.getElementById('sum-day-d').className = 'sum-val ' + colorClass(totalDayChange);
   document.getElementById('sum-day-d').textContent = (totalDayChange >= 0 ? '+' : '') + fmtMoney(totalDayChange);
@@ -1911,6 +1933,7 @@ function refreshPortfolio() {
   const result = buildHoldingsFromTransactions();
   PORTFOLIO = result.holdings;
   CASH_BALANCE = result.cashBalance;
+  REALIZED_PL_MAP = result.realizedPLMap;
   renderTransactions();
   renderTable();
   updateSummary();
