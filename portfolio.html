@@ -382,6 +382,12 @@
     border-radius: 4px;
   }
   .treemap-cell:hover { filter: brightness(1.15); z-index: 10; }
+  .treemap-cell.selected-cell {
+    outline: 3px solid var(--primary);
+    outline-offset: -2px;
+    box-shadow: 0 0 14px rgba(99, 102, 241, 0.9);
+    z-index: 15;
+  }
   .treemap-cell.gain-hi { background: #22c55e; }
   .treemap-cell.gain-md { background: #16a34a; }
   .treemap-cell.gain-lo { background: #14532d; }
@@ -781,9 +787,12 @@
     </div>
   </div>
   <div class="transaction-panel">
-    <div class="section-title" style="display:flex; justify-content:space-between; align-items:center;">
+    <div class="section-title" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
       <span>Transaction history <span id="txn-filter-indicator" style="color: var(--accent); font-size: 11px; margin-left: 8px;"></span></span>
-      <button id="btn-clear-filter" class="btn" style="padding: 2px 8px; font-size: 10px; display: none;" onclick="setTxnFilter(null)">Clear</button>
+      <div style="display:flex; align-items:center; gap:8px;">
+        <input type="text" id="txn-search-input" placeholder="Search Ticker..." oninput="onTxnSearchInput(this.value)" style="border: 1px solid var(--border2); background: var(--bg3); color: var(--text); font-family: inherit; font-size: 12px; border-radius: 6px; padding: 4px 10px; width: 130px; outline: none;">
+        <button id="btn-clear-filter" class="btn" style="padding: 3px 8px; font-size: 11px; display: none;" onclick="setTxnFilter(null)">Clear</button>
+      </div>
     </div>
     <div class="data-pill">Saved locally in browser</div>
     <div style="display:flex; flex-wrap:wrap; gap:8px; margin-bottom:12px;">
@@ -897,6 +906,7 @@ let sortCol = 'marketValue';
 let sortAsc = false;
 let colorMode = 'day';
 let txnFilter = null;
+let txnSearchQuery = '';
 let chartHideTimer = null;
 
 function initPortfolios() {
@@ -1034,30 +1044,65 @@ async function deletePortfolioPrompt(id, name) {
     }
   }
 }
-function setTxnFilter(ticker) {
-  if (txnFilter === ticker) {
-    txnFilter = null;
-  } else {
-    txnFilter = ticker;
-  }
-  document.getElementById('txn-filter-indicator').textContent = txnFilter ? `(Filter: ${txnFilter})` : '';
-  document.getElementById('btn-clear-filter').style.display = txnFilter ? 'inline-block' : 'none';
-  renderTransactions();
-
+function syncFilterHighlights() {
   // Highlight the row in the portfolio table
   document.querySelectorAll('#portfolio-tbody tr').forEach(tr => {
     tr.classList.remove('selected-row');
     if (txnFilter && tr.dataset.ticker === txnFilter) {
       tr.classList.add('selected-row');
+      tr.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+  });
+
+  // Highlight cell in heatmap
+  document.querySelectorAll('.treemap-cell').forEach(cell => {
+    cell.classList.remove('selected-cell');
+    if (txnFilter && cell.dataset.ticker === txnFilter) {
+      cell.classList.add('selected-cell');
     }
   });
 }
 
-function highlightTxnRow(tr) {
-  const isHighlighted = tr.classList.contains('selected-row');
-  document.querySelectorAll('#txn-tbody tr').forEach(r => r.classList.remove('selected-row'));
-  if (!isHighlighted) {
-    tr.classList.add('selected-row');
+function onTxnSearchInput(val) {
+  txnSearchQuery = (val || '').trim().toUpperCase();
+  txnFilter = txnSearchQuery ? txnSearchQuery : null;
+  updateTxnFilterUI();
+  renderTransactions();
+  syncFilterHighlights();
+}
+
+function updateTxnFilterUI() {
+  const activeFilter = txnSearchQuery || txnFilter;
+  document.getElementById('txn-filter-indicator').textContent = activeFilter ? `(Filter: ${activeFilter})` : '';
+  document.getElementById('btn-clear-filter').style.display = activeFilter ? 'inline-block' : 'none';
+  const searchInp = document.getElementById('txn-search-input');
+  if (searchInp && searchInp.value !== (activeFilter || '')) {
+    searchInp.value = activeFilter || '';
+  }
+}
+
+function setTxnFilter(ticker) {
+  if (txnFilter === ticker || ticker === null) {
+    txnFilter = null;
+    txnSearchQuery = '';
+  } else {
+    txnFilter = ticker;
+    txnSearchQuery = ticker;
+  }
+  updateTxnFilterUI();
+  renderTransactions();
+  syncFilterHighlights();
+}
+
+function highlightTxnRow(tr, ticker) {
+  if (ticker && ticker !== '—') {
+    setTxnFilter(ticker);
+  } else {
+    const isHighlighted = tr.classList.contains('selected-row');
+    document.querySelectorAll('#txn-tbody tr').forEach(r => r.classList.remove('selected-row'));
+    if (!isHighlighted) {
+      tr.classList.add('selected-row');
+    }
   }
 }
 
@@ -1278,12 +1323,13 @@ function renderTransactions() {
   const { realizedPLMap } = buildHoldingsFromTransactions();
   
   let filtered = transactions;
-  if (txnFilter) {
-    filtered = transactions.filter(tx => tx.ticker && tx.ticker.toUpperCase() === txnFilter.toUpperCase());
+  const activeFilter = (txnSearchQuery || txnFilter || '').trim().toUpperCase();
+  if (activeFilter) {
+    filtered = transactions.filter(tx => tx.ticker && tx.ticker.toUpperCase().includes(activeFilter));
   }
   
   if (!filtered.length) {
-    tbody.innerHTML = `<tr><td colspan="7" style="color: var(--muted); text-align:center; padding:14px;">No transactions found for ${txnFilter}.</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="7" style="color: var(--muted); text-align:center; padding:14px;">No transactions found for ${activeFilter}.</td></tr>`;
     return;
   }
 
@@ -1314,8 +1360,9 @@ function renderTransactions() {
     } else if (tx.action === 'withdraw') {
       actionBadge = '<span style="background:var(--loss-dim); color:var(--loss); padding:2px 7px; border-radius:4px; font-size:11px;">Withdraw</span>';
     }
+    const isSelected = activeFilter && (ticker === activeFilter || ticker.includes(activeFilter));
     return `
-      <tr onclick="highlightTxnRow(this)">
+      <tr onclick="highlightTxnRow(this, '${ticker}')" class="${isSelected ? 'selected-row' : ''}">
         <td>${formatDate(tx.date)}</td>
         <td>${ticker}</td>
         <td>${actionBadge}</td>
@@ -1821,6 +1868,10 @@ function renderMapPane(container, items, title) {
     itemCells.forEach(cell => {
       const div = document.createElement('div');
       div.className = 'treemap-cell';
+      div.dataset.ticker = cell.ticker;
+      if (txnFilter && cell.ticker === txnFilter) {
+        div.classList.add('selected-cell');
+      }
       div.style.left = block.x + cell.x + 'px';
       div.style.top = block.y + cell.y + 'px';
       div.style.width = cell.w + 'px';
@@ -1838,6 +1889,9 @@ function renderMapPane(container, items, title) {
           <div class="cell-pct" style="font-size:${pctSize}px">${displayPct !== null && displayPct !== undefined ? fmtSign(displayPct) + '%' : ''}</div>
         `;
       }
+      div.addEventListener('click', () => {
+        setTxnFilter(cell.ticker);
+      });
       div.addEventListener('mousemove', (e) => {
         const tt = document.getElementById('tooltip');
         tt.style.display = 'block';
