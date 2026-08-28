@@ -437,8 +437,217 @@
   }
   .tt-tick { font-family: 'Syne', sans-serif; font-weight: 800; font-size: 16px; margin-bottom: 4px; }
   .tt-name { color: var(--muted); font-size: 11px; margin-bottom: 8px; }
-  .tt-row { display: flex; justify-content: space-between; gap: 20px; font-size: 12px; margin-top: 4px; }
-  .tt-key { color: var(--muted); }
+  /* CURRENCY CONVERSION POPOVER */
+  .currency-popover {
+    position: fixed;
+    z-index: 2500;
+    width: 320px;
+    background: #0f131a;
+    border: 1px solid #2a3444;
+    border-radius: 14px;
+    box-shadow: 0 16px 48px rgba(0, 0, 0, 0.75), 0 0 0 1px rgba(255, 255, 255, 0.06);
+    padding: 16px;
+    font-family: 'JetBrains Mono', monospace;
+    color: var(--text);
+    animation: popover-fade-in 0.15s cubic-bezier(0.16, 1, 0.3, 1);
+    backdrop-filter: blur(10px);
+  }
+  @keyframes popover-fade-in {
+    from { opacity: 0; transform: translateY(-4px) scale(0.97); }
+    to { opacity: 1; transform: translateY(0) scale(1); }
+  }
+  .popover-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 12px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--border);
+  }
+  .popover-title {
+    font-family: 'Syne', sans-serif;
+    font-weight: 700;
+    font-size: 12px;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+    color: var(--accent);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 250px;
+  }
+  .popover-close {
+    background: transparent;
+    border: none;
+    color: var(--muted);
+    font-size: 14px;
+    cursor: pointer;
+    line-height: 1;
+    padding: 2px 6px;
+    border-radius: 4px;
+  }
+  .popover-close:hover {
+    color: var(--text);
+    background: var(--border);
+  }
+  .pop-card-usd, .pop-card-thb {
+    background: var(--bg3);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px 12px;
+  }
+  .pop-card-thb {
+    background: linear-gradient(135deg, rgba(56, 189, 248, 0.08), rgba(139, 92, 246, 0.08));
+    border-color: rgba(56, 189, 248, 0.3);
+  }
+  .pop-label {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+    color: var(--muted);
+    margin-bottom: 3px;
+    display: flex;
+    justify-content: space-between;
+  }
+  .pop-val-usd {
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--text);
+  }
+  .pop-val-thb {
+    font-size: 19px;
+    font-weight: 700;
+    color: #38bdf8;
+    letter-spacing: -0.3px;
+  }
+  .pop-divider {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 8px 0;
+  }
+  .pop-divider-line {
+    flex: 1;
+    height: 1px;
+    background: var(--border);
+  }
+  .pop-rate-pill {
+    font-size: 10.5px;
+    color: var(--muted);
+    background: var(--bg2);
+    padding: 2px 8px;
+    border-radius: 12px;
+    border: 1px solid var(--border2);
+  }
+  .pop-controls {
+    margin-top: 10px;
+    display: flex;
+    gap: 8px;
+    align-items: center;
+  }
+  .pop-rate-input-wrap {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    background: var(--bg2);
+    border: 1px solid var(--border2);
+    border-radius: 6px;
+    padding: 4px 8px;
+    font-size: 11px;
+  }
+  .pop-rate-input-wrap span {
+    color: var(--muted);
+    margin-right: 4px;
+    white-space: nowrap;
+  }
+  .pop-rate-input {
+    width: 100%;
+    background: transparent;
+    border: none;
+    color: var(--text);
+    font-family: inherit;
+    font-size: 11px;
+    outline: none;
+  }
+  .pop-btn {
+    padding: 5px 10px;
+    border-radius: 6px;
+    border: 1px solid var(--border2);
+    background: var(--bg3);
+    color: var(--text);
+    font-family: inherit;
+    font-size: 11px;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: all 0.15s;
+  }
+  .pop-btn:hover {
+    background: var(--border);
+    border-color: var(--muted);
+  }
+  .pop-btn-primary {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #fff;
+  }
+  .pop-btn-primary:hover {
+    background: #2563eb;
+  }
+  .popover-footer {
+    margin-top: 10px;
+    font-size: 10px;
+    color: var(--muted);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-top: 1px solid var(--border);
+    padding-top: 8px;
+  }
+
+  /* FX Header Widget */
+  .fx-header-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 10px;
+    border-radius: 6px;
+    border: 1px solid var(--border2);
+    background: var(--bg3);
+    font-size: 11px;
+    color: var(--text);
+    cursor: pointer;
+    transition: all 0.15s;
+    user-select: none;
+  }
+  .fx-header-badge:hover {
+    border-color: var(--accent);
+    background: var(--bg2);
+  }
+  .fx-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--gain);
+    display: inline-block;
+  }
+  .fx-dot.updating {
+    background: var(--gold);
+    animation: pulse 1s infinite;
+  }
+
+  /* Clickable money values */
+  .money-val {
+    cursor: pointer;
+    transition: color 0.15s, background-color 0.15s;
+    border-radius: 4px;
+    padding: 1px 3px;
+    position: relative;
+    user-select: none;
+  }
+  .money-val:hover {
+    background: rgba(59, 130, 246, 0.15);
+    color: #60a5fa !important;
+  }
 
   .modal-backdrop {
     position: fixed;
@@ -693,6 +902,45 @@
   </div>
 </div>
 
+<!-- CURRENCY CONVERSION POPOVER (OPTION C) -->
+<div class="currency-popover" id="currency-popover" style="display: none;">
+  <div class="popover-header">
+    <div class="popover-title" id="pop-title">USD ➔ THB Conversion</div>
+    <button class="popover-close" onclick="hideCurrencyPopover(event)" title="Close">✕</button>
+  </div>
+  <div class="pop-card-usd">
+    <div class="pop-label">
+      <span>USD Amount</span>
+      <span style="color:var(--muted); font-size:10px;">Base</span>
+    </div>
+    <div class="pop-val-usd" id="pop-val-usd">$0.00</div>
+  </div>
+  <div class="pop-divider">
+    <div class="pop-divider-line"></div>
+    <div class="pop-rate-pill" id="pop-rate-badge">1 USD = 32.86 THB</div>
+    <div class="pop-divider-line"></div>
+  </div>
+  <div class="pop-card-thb">
+    <div class="pop-label">
+      <span style="color:#38bdf8;">Thai Baht (THB)</span>
+      <span style="color:rgba(56,189,248,0.8); font-size:10px;">Converted</span>
+    </div>
+    <div class="pop-val-thb" id="pop-val-thb">฿0.00</div>
+  </div>
+  <div class="pop-controls">
+    <div class="pop-rate-input-wrap" title="Custom Exchange Rate (Enter to customize)">
+      <span>Rate:</span>
+      <input type="number" id="pop-rate-input" class="pop-rate-input" step="0.01" placeholder="32.86" oninput="onCustomRateInput(this.value)">
+    </div>
+    <button class="pop-btn" onclick="resetLiveRate()" title="Reset to Real-time Live Market Rate">Live Rate</button>
+    <button class="pop-btn pop-btn-primary" onclick="copyThbValue()" id="btn-copy-thb" title="Copy THB amount to clipboard">📋 Copy</button>
+  </div>
+  <div class="popover-footer">
+    <span id="pop-update-time">🟢 Live FX Rate</span>
+    <span style="color:var(--muted); font-size:9px;">Click outside or Esc</span>
+  </div>
+</div>
+
 <header class="header">
   <div class="header-brand">
     <div class="brand-icon">PF</div>
@@ -703,15 +951,15 @@
   <div class="header-stats">
     <div class="hstat">
       <span class="hstat-label">Net Worth</span>
-      <span class="hstat-val" id="hdr-nw">—</span>
+      <span class="hstat-val money-val" id="hdr-nw" title="Click to view in THB">—</span>
     </div>
     <div class="hstat">
       <span class="hstat-label">Market Value</span>
-      <span class="hstat-val" id="hdr-mv">—</span>
+      <span class="hstat-val money-val" id="hdr-mv" title="Click to view in THB">—</span>
     </div>
     <div class="hstat">
       <span class="hstat-label">Total Gain</span>
-      <span class="hstat-val" id="hdr-gain">—</span>
+      <span class="hstat-val money-val" id="hdr-gain" title="Click to view in THB">—</span>
     </div>
     <div class="hstat">
       <span class="hstat-label">Day %</span>
@@ -723,6 +971,10 @@
     </div>
   </div>
   <div class="header-actions">
+    <div class="fx-header-badge" id="fx-header-badge" onclick="showFxQuickModal(event)" title="Live USD/THB Rate · Click to convert or edit">
+      <span class="fx-dot" id="fx-hdr-dot"></span>
+      <span>USD/THB: <strong id="hdr-fx-rate">32.86</strong></span>
+    </div>
     <span class="refresh-dot" id="refresh-dot"></span>
     <button class="btn" onclick="openAvgCalculator()" style="border-color: var(--accent); color: var(--accent);">∑ Avg Calc</button>
     <button class="btn" onclick="fetchPrices()">↻ Refresh</button>
@@ -732,7 +984,7 @@
 <div class="summary-bar">
   <div class="sum-card">
     <div class="sum-label">Net Worth</div>
-    <div class="sum-val" id="sum-nw">—</div>
+    <div class="sum-val money-val" id="sum-nw" title="Click to view in THB">—</div>
     <div class="sum-sub neutral" id="sum-nw-sub">Total Value</div>
   </div>
   <div class="sum-card">
@@ -740,27 +992,27 @@
       <span>Cash Balance</span>
       <button class="btn" style="padding: 1px 6px; font-size: 9px; height: 18px; line-height: 1;" onclick="reconcileCash()">Reconcile</button>
     </div>
-    <div class="sum-val" id="sum-cash">—</div>
+    <div class="sum-val money-val" id="sum-cash" title="Click to view in THB">—</div>
     <div class="sum-sub neutral" id="sum-cash-pct">0.00% of port</div>
   </div>
   <div class="sum-card">
     <div class="sum-label">Market Value</div>
-    <div class="sum-val" id="sum-mv">—</div>
+    <div class="sum-val money-val" id="sum-mv" title="Click to view in THB">—</div>
     <div class="sum-sub neutral" id="sum-mv-sub">Loading live prices…</div>
   </div>
   <div class="sum-card">
     <div class="sum-label">Total Gain $</div>
-    <div class="sum-val" id="sum-gain-d">—</div>
+    <div class="sum-val money-val" id="sum-gain-d" title="Click to view in THB">—</div>
     <div class="sum-sub" id="sum-gain-pct">—</div>
   </div>
   <div class="sum-card">
     <div class="sum-label">Realized Gain</div>
-    <div class="sum-val" id="sum-realized-d">—</div>
+    <div class="sum-val money-val" id="sum-realized-d" title="Click to view in THB">—</div>
     <div class="sum-sub" id="sum-realized-pct">—</div>
   </div>
   <div class="sum-card">
     <div class="sum-label">Day Change</div>
-    <div class="sum-val" id="sum-day-d">—</div>
+    <div class="sum-val money-val" id="sum-day-d" title="Click to view in THB">—</div>
     <div class="sum-sub" id="sum-day-pct">—</div>
   </div>
 </div>
@@ -908,6 +1160,219 @@ let colorMode = 'day';
 let txnFilter = null;
 let txnSearchQuery = '';
 let chartHideTimer = null;
+
+// FX Conversion State
+const FX_STORAGE_KEY = 'portfolio_usd_thb_rate_v1';
+let usdThbRate = 32.86;
+let isCustomRate = false;
+let lastFxUpdated = null;
+let currentPopAmount = 0;
+let currentPopLabel = '';
+
+async function fetchExchangeRate() {
+  const fxDot = document.getElementById('fx-hdr-dot');
+  if (fxDot) fxDot.classList.add('updating');
+  try {
+    const res = await fetch('https://open.er-api.com/v6/latest/USD');
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    if (data && data.rates && data.rates.THB) {
+      const liveRate = parseFloat(Number(data.rates.THB).toFixed(4));
+      if (!isCustomRate) {
+        usdThbRate = liveRate;
+        localStorage.setItem(FX_STORAGE_KEY, JSON.stringify({
+          rate: usdThbRate,
+          isCustom: false,
+          timestamp: Date.now()
+        }));
+      }
+      lastFxUpdated = new Date();
+      updateFxDisplay();
+    }
+  } catch (err) {
+    console.warn('Primary FX API failed, trying fallback:', err);
+    try {
+      const res2 = await fetch('https://api.frankfurter.dev/v1/latest?base=USD&symbols=THB');
+      if (res2.ok) {
+        const data2 = await res2.json();
+        if (data2 && data2.rates && data2.rates.THB) {
+          const liveRate = parseFloat(Number(data2.rates.THB).toFixed(4));
+          if (!isCustomRate) {
+            usdThbRate = liveRate;
+            localStorage.setItem(FX_STORAGE_KEY, JSON.stringify({
+              rate: usdThbRate,
+              isCustom: false,
+              timestamp: Date.now()
+            }));
+          }
+          lastFxUpdated = new Date();
+          updateFxDisplay();
+        }
+      }
+    } catch (err2) {
+      console.warn('Fallback FX API failed:', err2);
+    }
+  } finally {
+    if (fxDot) fxDot.classList.remove('updating');
+  }
+}
+
+function initFxRate() {
+  try {
+    const saved = localStorage.getItem(FX_STORAGE_KEY);
+    if (saved) {
+      const parsed = JSON.parse(saved);
+      if (parsed && parsed.rate) {
+        usdThbRate = Number(parsed.rate);
+        isCustomRate = !!parsed.isCustom;
+        if (parsed.timestamp) lastFxUpdated = new Date(parsed.timestamp);
+      }
+    }
+  } catch (e) {}
+  updateFxDisplay();
+  fetchExchangeRate();
+}
+
+function updateFxDisplay() {
+  const hdrFxRate = document.getElementById('hdr-fx-rate');
+  if (hdrFxRate) {
+    hdrFxRate.textContent = `${usdThbRate.toFixed(2)}${isCustomRate ? '*' : ''}`;
+  }
+  const badge = document.getElementById('fx-header-badge');
+  if (badge) {
+    badge.title = `USD/THB: 1 USD = ${usdThbRate.toFixed(2)} THB (${isCustomRate ? 'Custom rate · Click to view/edit' : 'Live rate · Click to view/edit'})`;
+  }
+}
+
+function showMoneyPopover(amount, event, label = 'Amount Conversion') {
+  if (amount === undefined || amount === null || isNaN(amount)) return;
+  if (event && event.stopPropagation) event.stopPropagation();
+
+  currentPopAmount = Number(amount);
+  currentPopLabel = label;
+
+  const popover = document.getElementById('currency-popover');
+  if (!popover) return;
+
+  renderPopoverContent();
+
+  popover.style.display = 'block';
+
+  const clickX = event.clientX !== undefined ? event.clientX : (event.touches && event.touches[0] ? event.touches[0].clientX : window.innerWidth / 2);
+  const clickY = event.clientY !== undefined ? event.clientY : (event.touches && event.touches[0] ? event.touches[0].clientY : window.innerHeight / 2);
+
+  const popWidth = 320;
+  const popHeight = 260;
+
+  let left = clickX + 12;
+  let top = clickY - 20;
+
+  if (left + popWidth > window.innerWidth - 12) {
+    left = clickX - popWidth - 12;
+  }
+  if (left < 10) left = 10;
+
+  if (top + popHeight > window.innerHeight - 12) {
+    top = window.innerHeight - popHeight - 12;
+  }
+  if (top < 10) top = 10;
+
+  popover.style.left = left + 'px';
+  popover.style.top = top + 'px';
+}
+
+function hideCurrencyPopover(event) {
+  if (event && event.stopPropagation) event.stopPropagation();
+  const popover = document.getElementById('currency-popover');
+  if (popover) popover.style.display = 'none';
+}
+
+function renderPopoverContent() {
+  const isGain = currentPopAmount > 0;
+  const isLoss = currentPopAmount < 0;
+  const absUsd = Math.abs(currentPopAmount);
+  const thbVal = currentPopAmount * usdThbRate;
+  const absThb = Math.abs(thbVal);
+
+  const sign = currentPopAmount < 0 ? '-' : ((currentPopLabel.includes('Gain') || currentPopLabel.includes('Change')) && isGain ? '+' : '');
+
+  document.getElementById('pop-title').textContent = currentPopLabel;
+  
+  const usdFormatted = `${sign}$${absUsd.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  const thbFormatted = `${sign}฿${absThb.toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
+  const usdEl = document.getElementById('pop-val-usd');
+  const thbEl = document.getElementById('pop-val-thb');
+
+  usdEl.textContent = usdFormatted;
+  thbEl.textContent = thbFormatted;
+
+  if (isLoss) {
+    usdEl.style.color = 'var(--loss)';
+    thbEl.style.color = 'var(--loss)';
+  } else if (isGain && (currentPopLabel.includes('Gain') || currentPopLabel.includes('Change'))) {
+    usdEl.style.color = 'var(--gain)';
+    thbEl.style.color = 'var(--gain)';
+  } else {
+    usdEl.style.color = 'var(--text)';
+    thbEl.style.color = '#38bdf8';
+  }
+
+  document.getElementById('pop-rate-badge').textContent = `1 USD = ${usdThbRate.toFixed(2)} THB${isCustomRate ? ' (Custom)' : ' (Live)'}`;
+  document.getElementById('pop-rate-input').value = usdThbRate.toFixed(2);
+  
+  const timeStr = lastFxUpdated ? `Updated: ${lastFxUpdated.toLocaleTimeString()}` : 'Live Rate';
+  document.getElementById('pop-update-time').textContent = `${isCustomRate ? '⚙ Custom Rate' : '🟢 Live FX Rate'} · ${timeStr}`;
+  
+  const copyBtn = document.getElementById('btn-copy-thb');
+  if (copyBtn) copyBtn.textContent = '📋 Copy';
+}
+
+function onCustomRateInput(val) {
+  const num = parseFloat(val);
+  if (!isNaN(num) && num > 0) {
+    usdThbRate = num;
+    isCustomRate = true;
+    localStorage.setItem(FX_STORAGE_KEY, JSON.stringify({
+      rate: usdThbRate,
+      isCustom: true,
+      timestamp: Date.now()
+    }));
+    updateFxDisplay();
+    renderPopoverContent();
+  }
+}
+
+function resetLiveRate() {
+  isCustomRate = false;
+  fetchExchangeRate().then(() => {
+    renderPopoverContent();
+  });
+}
+
+function copyThbValue() {
+  const thbVal = currentPopAmount * usdThbRate;
+  const text = Math.abs(thbVal).toFixed(2);
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(text).then(() => {
+      const btn = document.getElementById('btn-copy-thb');
+      if (btn) {
+        btn.textContent = '✓ Copied!';
+        setTimeout(() => { btn.textContent = '📋 Copy'; }, 1500);
+      }
+    }).catch(() => {
+      prompt('Copy THB value:', text);
+    });
+  } else {
+    prompt('Copy THB value:', text);
+  }
+}
+
+function showFxQuickModal(event) {
+  const totalMv = PORTFOLIO.reduce((s,r) => s + ((priceData[r.ticker]?.price || r.price || 0) * r.shares), 0);
+  const netWorth = totalMv + CASH_BALANCE;
+  showMoneyPopover(netWorth > 0 ? netWorth : 1, event, netWorth > 0 ? 'Total Portfolio Net Worth' : 'USD/THB Conversion');
+}
 
 function initPortfolios() {
   const storedList = localStorage.getItem(PORTFOLIOS_LIST_KEY);
@@ -1367,7 +1832,7 @@ function renderTransactions() {
         <td>${ticker}</td>
         <td>${actionBadge}</td>
         <td>${tx.shares || '—'}</td>
-        <td>$${tx.price.toFixed(2)}</td>
+        <td class="money-val" title="Click to view in THB" onclick="event.stopPropagation(); showMoneyPopover(${tx.price}, event, '${ticker} Txn Price')">$${tx.price.toFixed(2)}</td>
         <td>${gainPctStr}</td>
         <td><button class="tx-delete-btn" onclick="deleteTransaction(${originalIndex}); event.stopPropagation();">Delete</button></td>
       </tr>`;
@@ -1505,6 +1970,7 @@ async function fetchPrices() {
   }
 
   try {
+    fetchExchangeRate(); // Refresh USD/THB live rate in parallel
     const results = await Promise.allSettled(tickers.map(fetchTickerPrice));
     results.forEach((result, idx) => {
       const ticker = tickers[idx];
@@ -1632,15 +2098,15 @@ function renderTable() {
         onmouseleave="hideTickerChart()">${r.ticker}</span></div></td>
       <td class="company-name">${r.name}</td>
       <td>${r.shares}</td>
-      <td>$${r.avgCost.toFixed(2)}</td>
-      <td>$${r.totalCost.toFixed(2)}</td>
+      <td class="money-val" title="Click to view in THB" onclick="event.stopPropagation(); showMoneyPopover(${r.avgCost}, event, '${r.ticker} Avg Cost')">$${r.avgCost.toFixed(2)}</td>
+      <td class="money-val" title="Click to view in THB" onclick="event.stopPropagation(); showMoneyPopover(${r.totalCost}, event, '${r.ticker} Total Cost')">$${r.totalCost.toFixed(2)}</td>
       <td>${r.portfolioPct !== null ? `${r.portfolioPct.toFixed(2)}%` : '—'}</td>
-      <td>${priceStr}</td>
+      <td class="money-val" title="Click to view in THB" onclick="event.stopPropagation(); showMoneyPopover(${r.price !== undefined ? r.price : 0}, event, '${r.ticker} Price')">${priceStr}</td>
       <td>${cpStr}</td>
-      <td>${mvStr}</td>
-      <td>${gainDStr}</td>
+      <td class="money-val" title="Click to view in THB" onclick="event.stopPropagation(); showMoneyPopover(${r.marketValue !== null ? r.marketValue : 0}, event, '${r.ticker} Market Value')">${mvStr}</td>
+      <td class="money-val" title="Click to view in THB" onclick="event.stopPropagation(); showMoneyPopover(${r.gainD !== null ? r.gainD : 0}, event, '${r.ticker} Total Gain')">${gainDStr}</td>
       <td>${gainPctStr}</td>
-      <td>${dayStr}</td>
+      <td class="money-val" title="Click to view in THB" onclick="event.stopPropagation(); showMoneyPopover(${r.changeD !== null ? r.changeD : 0}, event, '${r.ticker} Day Change')">${dayStr}</td>
     </tr>`;
   }).join('');
   renderFooter(rows);
@@ -1655,14 +2121,14 @@ function renderFooter(rows) {
   document.getElementById('portfolio-tfoot').innerHTML = `<tr>
     <td colspan="2">Summary: ${rows.length} Tickers</td>
     <td></td><td></td>
-    <td>$${totalCost.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})}</td>
+    <td class="money-val" title="Click to view in THB" onclick="showMoneyPopover(${totalCost}, event, 'Total Portfolio Cost')">$${totalCost.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})}</td>
     <td></td>
     <td></td>
     <td><span class="${colorClass(totalDayPct)}">${fmtSign(totalDayPct)}%</span></td>
-    <td>$${totalMV.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})}</td>
-    <td><span class="${colorClass(totalGainD)}">${totalGainD >= 0?'+':''}$${Math.abs(totalGainD).toFixed(2)}</span></td>
+    <td class="money-val" title="Click to view in THB" onclick="showMoneyPopover(${totalMV}, event, 'Total Market Value')">$${totalMV.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})}</td>
+    <td class="money-val" title="Click to view in THB" onclick="showMoneyPopover(${totalGainD}, event, 'Total Portfolio Gain')"><span class="${colorClass(totalGainD)}">${totalGainD >= 0?'+':''}$${Math.abs(totalGainD).toFixed(2)}</span></td>
     <td><span class="${colorClass(totalGainPct)}">${fmtSign(totalGainPct)}%</span></td>
-    <td><span class="${colorClass(totalDayChange)}">${totalDayChange >= 0?'+':''}$${Math.abs(totalDayChange).toFixed(2)}</span></td>
+    <td class="money-val" title="Click to view in THB" onclick="showMoneyPopover(${totalDayChange}, event, 'Total Day Change')"><span class="${colorClass(totalDayChange)}">${totalDayChange >= 0?'+':''}$${Math.abs(totalDayChange).toFixed(2)}</span></td>
   </tr>`;
 }
 function updateSummary() {
@@ -1687,33 +2153,55 @@ function updateSummary() {
   });
   const realizedGainPct = totalRealizedCost ? (totalRealizedGain / totalRealizedCost) * 100 : 0;
 
-  document.getElementById('sum-nw').textContent = '$' + netWorth.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
-  document.getElementById('sum-cash').textContent = '$' + CASH_BALANCE.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
+  const sumNwEl = document.getElementById('sum-nw');
+  sumNwEl.textContent = '$' + netWorth.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
+  sumNwEl.onclick = (e) => showMoneyPopover(netWorth, e, 'Net Worth');
+
+  const sumCashEl = document.getElementById('sum-cash');
+  sumCashEl.textContent = '$' + CASH_BALANCE.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
+  sumCashEl.onclick = (e) => showMoneyPopover(CASH_BALANCE, e, 'Cash Balance');
   document.getElementById('sum-cash-pct').textContent = `${cashPct.toFixed(2)}% of port`;
   
-  document.getElementById('sum-mv').textContent = '$' + marketValue.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
+  const sumMvEl = document.getElementById('sum-mv');
+  sumMvEl.textContent = '$' + marketValue.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
+  sumMvEl.onclick = (e) => showMoneyPopover(marketValue, e, 'Market Value');
   document.getElementById('sum-mv-sub').textContent = `${stockRows.length} positions · ${transactions.length} txns`;
   
-  document.getElementById('sum-gain-d').className = 'sum-val ' + colorClass(totalGainD);
-  document.getElementById('sum-gain-d').textContent = (totalGainD >= 0 ? '+' : '') + fmtMoney(totalGainD);
+  const sumGainEl = document.getElementById('sum-gain-d');
+  sumGainEl.className = 'sum-val money-val ' + colorClass(totalGainD);
+  sumGainEl.textContent = (totalGainD >= 0 ? '+' : '') + fmtMoney(totalGainD);
+  sumGainEl.onclick = (e) => showMoneyPopover(totalGainD, e, 'Total Gain ($)');
   document.getElementById('sum-gain-pct').className = 'sum-sub ' + colorClass(totalGainPct);
   document.getElementById('sum-gain-pct').textContent = fmtSign(totalGainPct) + '%';
 
   // Update Realized Gain UI
-  document.getElementById('sum-realized-d').className = 'sum-val ' + colorClass(totalRealizedGain);
-  document.getElementById('sum-realized-d').textContent = (totalRealizedGain >= 0 ? '+' : '') + fmtMoney(totalRealizedGain);
+  const sumRealizedEl = document.getElementById('sum-realized-d');
+  sumRealizedEl.className = 'sum-val money-val ' + colorClass(totalRealizedGain);
+  sumRealizedEl.textContent = (totalRealizedGain >= 0 ? '+' : '') + fmtMoney(totalRealizedGain);
+  sumRealizedEl.onclick = (e) => showMoneyPopover(totalRealizedGain, e, 'Realized Gain ($)');
   document.getElementById('sum-realized-pct').className = 'sum-sub ' + colorClass(realizedGainPct);
   document.getElementById('sum-realized-pct').textContent = fmtSign(realizedGainPct) + '%';
   
-  document.getElementById('sum-day-d').className = 'sum-val ' + colorClass(totalDayChange);
-  document.getElementById('sum-day-d').textContent = (totalDayChange >= 0 ? '+' : '') + fmtMoney(totalDayChange);
+  const sumDayEl = document.getElementById('sum-day-d');
+  sumDayEl.className = 'sum-val money-val ' + colorClass(totalDayChange);
+  sumDayEl.textContent = (totalDayChange >= 0 ? '+' : '') + fmtMoney(totalDayChange);
+  sumDayEl.onclick = (e) => showMoneyPopover(totalDayChange, e, 'Day Change ($)');
   document.getElementById('sum-day-pct').className = 'sum-sub ' + colorClass(totalDayPct);
   document.getElementById('sum-day-pct').textContent = fmtSign(totalDayPct) + '%';
   
-  document.getElementById('hdr-nw').textContent = '$' + (netWorth / 1000).toFixed(1) + 'K';
-  document.getElementById('hdr-mv').textContent = '$' + (marketValue / 1000).toFixed(1) + 'K';
-  document.getElementById('hdr-gain').className = 'hstat-val ' + colorClass(totalGainD);
-  document.getElementById('hdr-gain').textContent = (totalGainD >= 0 ? '+' : '') + '$' + Math.abs(totalGainD).toFixed(0);
+  const hdrNwEl = document.getElementById('hdr-nw');
+  hdrNwEl.textContent = '$' + (netWorth / 1000).toFixed(1) + 'K';
+  hdrNwEl.onclick = (e) => showMoneyPopover(netWorth, e, 'Header Net Worth');
+
+  const hdrMvEl = document.getElementById('hdr-mv');
+  hdrMvEl.textContent = '$' + (marketValue / 1000).toFixed(1) + 'K';
+  hdrMvEl.onclick = (e) => showMoneyPopover(marketValue, e, 'Header Market Value');
+
+  const hdrGainEl = document.getElementById('hdr-gain');
+  hdrGainEl.className = 'hstat-val money-val ' + colorClass(totalGainD);
+  hdrGainEl.textContent = (totalGainD >= 0 ? '+' : '') + '$' + Math.abs(totalGainD).toFixed(0);
+  hdrGainEl.onclick = (e) => showMoneyPopover(totalGainD, e, 'Header Total Gain');
+
   document.getElementById('hdr-day').className = 'hstat-val ' + colorClass(totalDayPct);
   document.getElementById('hdr-day').textContent = fmtSign(totalDayPct) + '%';
 
@@ -1899,9 +2387,11 @@ function renderMapPane(container, items, title) {
         tt.style.top = (e.clientY - 10) + 'px';
         document.getElementById('tt-tick').textContent = cell.ticker;
         document.getElementById('tt-name').textContent = cell.name;
-        document.getElementById('tt-price').textContent = cell.price !== undefined ? '$' + cell.price.toFixed(2) : '—';
+        const thbPriceStr = cell.price !== undefined ? ` <span style="color:var(--muted); font-size:10.5px;">(฿${(cell.price * usdThbRate).toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})})</span>` : '';
+        document.getElementById('tt-price').innerHTML = (cell.price !== undefined ? '$' + cell.price.toFixed(2) : '—') + thbPriceStr;
         document.getElementById('tt-chgpct').innerHTML = cell.changePct !== undefined ? `<span class="${colorClass(cell.changePct)}">${fmtSign(cell.changePct)}%</span>` : '—';
-        document.getElementById('tt-mv').textContent = cell.marketValue !== null ? '$' + cell.marketValue.toLocaleString('en-US',{maximumFractionDigits:0}) : '—';
+        const thbMvStr = cell.marketValue !== null ? ` <span style="color:var(--muted); font-size:10.5px;">(฿${Math.round(cell.marketValue * usdThbRate).toLocaleString('en-US')})</span>` : '';
+        document.getElementById('tt-mv').innerHTML = (cell.marketValue !== null ? '$' + cell.marketValue.toLocaleString('en-US',{maximumFractionDigits:0}) : '—') + thbMvStr;
         document.getElementById('tt-gp').innerHTML = cell.gainPct !== null ? `<span class="${colorClass(cell.gainPct)}">${fmtSign(cell.gainPct)}%</span>` : '—';
       });
       div.addEventListener('mouseleave', () => {
@@ -2030,11 +2520,30 @@ function setTodayDate() {
   document.getElementById('txn-date').value = new Date().toISOString().split('T')[0];
 }
 setTodayDate();
+initFxRate();
 initPortfolios();
 loadTransactions();
 refreshPortfolio();
 fetchPrices();
 setInterval(fetchPrices, 300000);
+setInterval(fetchExchangeRate, 300000);
+
+document.addEventListener('click', (e) => {
+  const popover = document.getElementById('currency-popover');
+  if (popover && popover.style.display !== 'none') {
+    if (!popover.contains(e.target) && !e.target.closest('.money-val') && !e.target.closest('.fx-header-badge')) {
+      popover.style.display = 'none';
+    }
+  }
+});
+
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') {
+    const popover = document.getElementById('currency-popover');
+    if (popover) popover.style.display = 'none';
+  }
+});
+
 window.addEventListener('resize', () => {
   if (document.getElementById('view-map').style.display !== 'none') renderMap();
 });
@@ -2112,9 +2621,10 @@ function updateCalcBase() {
   const totalMv = rows.reduce((sum, r) => sum + (r.marketValue || 0), 0);
   const currentMv = currentPrice * pos.shares;
   const currentWeight = totalMv > 0 ? (currentMv / totalMv) * 100 : 0;
+  const thbTotal = Math.round(pos.totalCost * usdThbRate).toLocaleString('en-US');
   
   document.getElementById('calc-base-info').innerHTML = 
-    `Current: <b>${pos.shares.toLocaleString()}</b> shares @ <b>$${pos.avgCost.toFixed(2)}</b> (Total: $${pos.totalCost.toLocaleString()}, Weight: <b>${currentWeight.toFixed(2)}%</b>)`;
+    `Current: <b>${pos.shares.toLocaleString()}</b> shares @ <b>$${pos.avgCost.toFixed(2)}</b> (Total: $${pos.totalCost.toLocaleString()} <span style="color:var(--muted); font-size:11px;">≈ ฿${thbTotal}</span>, Weight: <b>${currentWeight.toFixed(2)}%</b>)`;
   
   runAvgCalc();
 }
