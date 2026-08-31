@@ -1061,7 +1061,7 @@
             <th>Action</th>
             <th>Qty</th>
             <th>Price</th>
-            <th>Gain %</th>
+            <th>Gain / Loss</th>
             <th>Actions</th>
           </tr>
         </thead>
@@ -1812,13 +1812,21 @@ function renderTransactions() {
       actionBadge = '<span class="tag-gain">Buy</span>';
       if (pd && pd.price && tx.price > 0) {
         const currentGainPct = ((pd.price - tx.price) / tx.price) * 100;
-        gainPctStr = `<span class="${colorClass(currentGainPct)}">${fmtSign(currentGainPct)}%</span>`;
+        const currentGainD = (pd.price - tx.price) * (tx.shares || 0);
+        const sign = currentGainD >= 0 ? '+' : '-';
+        const amountStr = `${sign}$${Math.abs(currentGainD).toFixed(2)}`;
+        const pctStr = `${fmtSign(currentGainPct)}%`;
+        gainPctStr = `<span class="${colorClass(currentGainPct)} money-val" title="Click to view in THB" onclick="event.stopPropagation(); showMoneyPopover(${currentGainD}, event, '${ticker} Unrealized Gain')">${amountStr} (${pctStr})</span>`;
       }
     } else if (tx.action === 'sell') {
       actionBadge = '<span class="tag-loss">Sell</span>';
       const realized = realizedPLMap.get(tx);
       if (realized) {
-        gainPctStr = `<span class="${colorClass(realized.profitPct)}">${fmtSign(realized.profitPct)}%</span>`;
+        const profit = realized.profit;
+        const sign = profit >= 0 ? '+' : '-';
+        const amountStr = `${sign}$${Math.abs(profit).toFixed(2)}`;
+        const pctStr = `${fmtSign(realized.profitPct)}%`;
+        gainPctStr = `<span class="${colorClass(profit)} money-val" title="Click to view in THB" onclick="event.stopPropagation(); showMoneyPopover(${profit}, event, '${ticker} Realized P/L')">${amountStr} (${pctStr})</span>`;
       }
     } else if (tx.action === 'deposit') {
       actionBadge = '<span style="background:var(--gain-dim); color:var(--gain); padding:2px 7px; border-radius:4px; font-size:11px;">Deposit</span>';
