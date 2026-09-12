@@ -766,13 +766,89 @@
   }
   .transaction-table th { color: var(--muted); text-align: right; }
   .transaction-table th:first-child,
-  .transaction-table td:first-child,
+  .transaction-table td:first-child { text-align: center; width: 34px; padding: 8px 4px; }
   .transaction-table th:nth-child(2),
   .transaction-table td:nth-child(2) { text-align: left; }
   .transaction-table th:nth-child(3),
-  .transaction-table td:nth-child(3) { text-align: center; }
+  .transaction-table td:nth-child(3) { text-align: left; }
+  .transaction-table th:nth-child(4),
+  .transaction-table td:nth-child(4) { text-align: center; }
   .transaction-table td { text-align: right; }
   .transaction-table tbody tr:hover { background: rgba(255,255,255,0.04); }
+  .transaction-table tbody tr.txn-selected-row {
+    background: rgba(59, 130, 246, 0.16) !important;
+  }
+  .transaction-table tbody tr.txn-selected-row td:first-child {
+    box-shadow: inset 3px 0 0 0 var(--accent);
+  }
+  .txn-checkbox {
+    cursor: pointer;
+    accent-color: var(--accent);
+    width: 14px;
+    height: 14px;
+    vertical-align: middle;
+  }
+  .txn-sum-card {
+    display: none;
+    margin-bottom: 12px;
+    padding: 12px 16px;
+    background: linear-gradient(135deg, rgba(59, 130, 246, 0.09), rgba(139, 92, 246, 0.05));
+    border: 1px solid rgba(59, 130, 246, 0.35);
+    border-radius: 12px;
+    font-size: 12px;
+    animation: popover-fade-in 0.15s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  .txn-sum-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 10px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  }
+  .txn-sum-title-group {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+  .txn-sum-count-badge {
+    background: var(--accent);
+    color: white;
+    padding: 2px 8px;
+    border-radius: 12px;
+    font-size: 11px;
+    font-weight: 700;
+    font-family: 'Syne', sans-serif;
+  }
+  .txn-sum-tickers {
+    color: var(--text);
+    font-weight: 600;
+    font-size: 12px;
+  }
+  .txn-sum-grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 18px;
+    align-items: flex-end;
+  }
+  .txn-sum-stat {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+  }
+  .txn-sum-stat-lbl {
+    color: var(--muted);
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+  }
+  .txn-sum-stat-val {
+    font-size: 15px;
+    font-weight: 600;
+  }
   .data-pill {
     display: inline-flex;
     align-items: center;
@@ -1052,10 +1128,25 @@
       <button class="btn" onclick="triggerImport()">Import JSON</button>
       <input id="import-file-input" type="file" accept="application/json,.json" style="display:none" onchange="handleImportFile(event)">
     </div>
+    <!-- Multi-Select Transaction Summary Card -->
+    <div id="txn-selection-summary" class="txn-sum-card">
+      <div class="txn-sum-header">
+        <div class="txn-sum-title-group">
+          <span id="txn-selected-count-badge" class="txn-sum-count-badge">0 Selected</span>
+          <span id="txn-selected-details" class="txn-sum-tickers"></span>
+        </div>
+        <div style="display: flex; gap: 6px; align-items: center;">
+          <button class="btn" style="padding: 2px 8px; font-size: 11px;" onclick="clearTxnSelection()">✕ Clear</button>
+        </div>
+      </div>
+      <div id="txn-summary-metrics" class="txn-sum-grid"></div>
+    </div>
+
     <div class="table-wrap" style="max-height:260px; overflow:auto;">
       <table class="transaction-table">
         <thead>
           <tr>
+            <th style="text-align: center;"><input type="checkbox" id="txn-select-all" class="txn-checkbox" title="Select All Visible" onchange="toggleSelectAllTxns(this.checked, event)"></th>
             <th>Date</th>
             <th>Ticker</th>
             <th>Action</th>
@@ -1150,6 +1241,8 @@ let activePortfolioId = null;
 let currentTitleBase = '';
 let titleDotActive = true;
 let transactions = [];
+let selectedTxnSet = new Set();
+let currentVisibleTxns = [];
 let PORTFOLIO = [];
 let CASH_BALANCE = 0;
 let REALIZED_PL_MAP = new Map();
@@ -1427,6 +1520,7 @@ function switchPortfolio(id) {
 }
 
 function loadTransactions() {
+  selectedTxnSet.clear();
   try {
     const key = TXN_PREFIX + activePortfolioId;
     const stored = localStorage.getItem(key);
@@ -1755,8 +1849,8 @@ function buildHoldingsFromTransactions() {
       
       if (sharesSold > 0) {
         const profit = proceeds - totalCost;
-        const profitPct = (profit / totalCost) * 100;
-        realizedPLMap.set(tx, { profit, profitPct });
+        const profitPct = totalCost > 0 ? (profit / totalCost) * 100 : 0;
+        realizedPLMap.set(tx, { profit, profitPct, costBasis: totalCost, proceeds, sharesSold });
       }
     }
   });
@@ -1779,8 +1873,13 @@ function buildHoldingsFromTransactions() {
 
 function renderTransactions() {
   const tbody = document.getElementById('txn-tbody');
+  const wrap = tbody ? tbody.closest('.table-wrap') : null;
+  const prevScroll = wrap ? wrap.scrollTop : 0;
+  
   if (!transactions.length) {
-    tbody.innerHTML = '<tr><td colspan="7" style="color: var(--muted); text-align:center; padding:14px;">No transactions yet.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="8" style="color: var(--muted); text-align:center; padding:14px;">No transactions yet.</td></tr>';
+    currentVisibleTxns = [];
+    updateTxnSelectionSummary();
     return;
   }
   
@@ -1794,13 +1893,17 @@ function renderTransactions() {
   }
   
   if (!filtered.length) {
-    tbody.innerHTML = `<tr><td colspan="7" style="color: var(--muted); text-align:center; padding:14px;">No transactions found for ${activeFilter}.</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="8" style="color: var(--muted); text-align:center; padding:14px;">No transactions found for ${activeFilter}.</td></tr>`;
+    currentVisibleTxns = [];
+    updateTxnSelectionSummary();
     return;
   }
 
   const sortedForDisplay = filtered
     .map((tx, index) => ({ tx, originalIndex: transactions.indexOf(tx) }))
     .sort((a,b) => new Date(b.tx.date) - new Date(a.tx.date));
+
+  currentVisibleTxns = sortedForDisplay.map(item => item.tx);
 
   tbody.innerHTML = sortedForDisplay.map(({ tx, originalIndex }) => {
     const ticker = tx.ticker?.toUpperCase() || '—';
@@ -1833,11 +1936,20 @@ function renderTransactions() {
     } else if (tx.action === 'withdraw') {
       actionBadge = '<span style="background:var(--loss-dim); color:var(--loss); padding:2px 7px; border-radius:4px; font-size:11px;">Withdraw</span>';
     }
-    const isSelected = activeFilter && (ticker === activeFilter || ticker.includes(activeFilter));
+    const isRowFiltered = activeFilter && (ticker === activeFilter || ticker.includes(activeFilter));
+    const isSelected = selectedTxnSet.has(tx);
+    const rowClass = [
+      isSelected ? 'txn-selected-row' : '',
+      isRowFiltered ? 'selected-row' : ''
+    ].filter(Boolean).join(' ');
+
     return `
-      <tr onclick="highlightTxnRow(this, '${ticker}')" class="${isSelected ? 'selected-row' : ''}">
+      <tr onclick="onTxnRowClick(event, ${originalIndex})" class="${rowClass}">
+        <td onclick="event.stopPropagation();" style="text-align: center;">
+          <input type="checkbox" class="txn-checkbox" ${isSelected ? 'checked' : ''} onchange="toggleTxnSelectByRef(${originalIndex}, this.checked, event)">
+        </td>
         <td>${formatDate(tx.date)}</td>
-        <td>${ticker}</td>
+        <td><span class="tick-badge" onclick="event.stopPropagation(); setTxnFilter('${ticker}')" title="Filter by ${ticker}">${ticker}</span></td>
         <td>${actionBadge}</td>
         <td>${tx.shares || '—'}</td>
         <td class="money-val" title="Click to view in THB" onclick="event.stopPropagation(); showMoneyPopover(${tx.price}, event, '${ticker} Txn Price')">$${tx.price.toFixed(2)}</td>
@@ -1845,13 +1957,332 @@ function renderTransactions() {
         <td><button class="tx-delete-btn" onclick="deleteTransaction(${originalIndex}); event.stopPropagation();">Delete</button></td>
       </tr>`;
   }).join('');
+
+  if (wrap && prevScroll > 0) {
+    wrap.scrollTop = prevScroll;
+  }
+
+  updateTxnSelectionSummary();
 }
+
 function deleteTransaction(index) {
   if (index < 0 || index >= transactions.length) return;
   if (!confirm(`Are you sure you want to delete this transaction for ${transactions[index].ticker}?`)) return;
+  selectedTxnSet.delete(transactions[index]);
   transactions.splice(index, 1);
   saveTransactions();
   refreshPortfolio();
+}
+
+function toggleTxnSelectByRef(originalIndex, isChecked, event) {
+  if (event) event.stopPropagation();
+  const tx = transactions[originalIndex];
+  if (!tx) return;
+  if (isChecked) {
+    selectedTxnSet.add(tx);
+  } else {
+    selectedTxnSet.delete(tx);
+  }
+  renderTransactions();
+}
+
+function onTxnRowClick(event, originalIndex) {
+  if (event.target.closest('input') || event.target.closest('button') || event.target.closest('.money-val') || event.target.closest('.tick-badge')) {
+    return;
+  }
+  const tx = transactions[originalIndex];
+  if (!tx) return;
+  if (selectedTxnSet.has(tx)) {
+    selectedTxnSet.delete(tx);
+  } else {
+    selectedTxnSet.add(tx);
+  }
+  renderTransactions();
+}
+
+function toggleSelectAllTxns(checked, event) {
+  if (event) event.stopPropagation();
+  if (!currentVisibleTxns) return;
+  if (checked) {
+    currentVisibleTxns.forEach(tx => selectedTxnSet.add(tx));
+  } else {
+    currentVisibleTxns.forEach(tx => selectedTxnSet.delete(tx));
+  }
+  renderTransactions();
+}
+
+function clearTxnSelection() {
+  selectedTxnSet.clear();
+  renderTransactions();
+}
+
+function updateTxnSelectionSummary() {
+  const summaryEl = document.getElementById('txn-selection-summary');
+  const countBadge = document.getElementById('txn-selected-count-badge');
+  const detailsEl = document.getElementById('txn-selected-details');
+  const metricsEl = document.getElementById('txn-summary-metrics');
+  const selectAllCb = document.getElementById('txn-select-all');
+
+  if (!summaryEl) return;
+
+  // Cleanup any transactions in selectedTxnSet that are no longer in transactions array
+  for (const tx of selectedTxnSet) {
+    if (!transactions.includes(tx)) selectedTxnSet.delete(tx);
+  }
+
+  // Update Select All checkbox state
+  if (selectAllCb) {
+    const visibleCount = currentVisibleTxns ? currentVisibleTxns.length : 0;
+    const selectedVisibleCount = currentVisibleTxns ? currentVisibleTxns.filter(tx => selectedTxnSet.has(tx)).length : 0;
+    if (visibleCount > 0 && selectedVisibleCount === visibleCount) {
+      selectAllCb.checked = true;
+      selectAllCb.indeterminate = false;
+    } else if (selectedVisibleCount > 0) {
+      selectAllCb.checked = false;
+      selectAllCb.indeterminate = true;
+    } else {
+      selectAllCb.checked = false;
+      selectAllCb.indeterminate = false;
+    }
+  }
+
+  const selectedCount = selectedTxnSet.size;
+  if (selectedCount === 0) {
+    summaryEl.style.display = 'none';
+    return;
+  }
+
+  summaryEl.style.display = 'block';
+  countBadge.textContent = `${selectedCount} Selected`;
+
+  const { realizedPLMap } = buildHoldingsFromTransactions();
+
+  // Group by ticker to perform precise per-ticker calculation
+  const tickerGroups = {};
+  let cashTransferSum = 0;
+  let cashTransferCount = 0;
+
+  selectedTxnSet.forEach(tx => {
+    const ticker = tx.ticker?.toUpperCase() || 'UNKNOWN';
+    if (tx.action === 'deposit') {
+      cashTransferSum += (tx.price || 0);
+      cashTransferCount++;
+      return;
+    }
+    if (tx.action === 'withdraw') {
+      cashTransferSum -= (tx.price || 0);
+      cashTransferCount++;
+      return;
+    }
+
+    if (!tickerGroups[ticker]) {
+      tickerGroups[ticker] = {
+        ticker,
+        buys: [],
+        sells: [],
+        totalBuyShares: 0,
+        totalBuyCost: 0,
+        totalSellShares: 0,
+        totalSellProceeds: 0,
+      };
+    }
+    const g = tickerGroups[ticker];
+    if (tx.action === 'buy') {
+      g.buys.push(tx);
+      g.totalBuyShares += (tx.shares || 0);
+      g.totalBuyCost += (tx.shares || 0) * (tx.price || 0);
+    } else if (tx.action === 'sell') {
+      g.sells.push(tx);
+      g.totalSellShares += (tx.shares || 0);
+      g.totalSellProceeds += (tx.shares || 0) * (tx.price || 0);
+    }
+  });
+
+  const tickerKeys = Object.keys(tickerGroups);
+  let totalCost = 0;
+  let totalCurrentValOrProceeds = 0;
+  let totalProfitD = 0;
+
+  let totalBuyCount = 0;
+  let totalSellCount = 0;
+  let totalUnrealizedProfitD = 0;
+  let totalRealizedProfitD = 0;
+
+  tickerKeys.forEach(tick => {
+    const g = tickerGroups[tick];
+    const pd = priceData[tick];
+    const livePrice = (pd && pd.price !== undefined) ? pd.price : null;
+
+    totalBuyCount += g.buys.length;
+    totalSellCount += g.sells.length;
+
+    // Case A: Only Buys for this ticker
+    if (g.buys.length > 0 && g.sells.length === 0) {
+      const cost = g.totalBuyCost;
+      const curPrice = livePrice !== null ? livePrice : (cost / (g.totalBuyShares || 1));
+      const curVal = g.totalBuyShares * curPrice;
+      const profit = curVal - cost;
+
+      totalCost += cost;
+      totalCurrentValOrProceeds += curVal;
+      totalProfitD += profit;
+      totalUnrealizedProfitD += profit;
+    }
+    // Case B: Only Sells for this ticker
+    else if (g.sells.length > 0 && g.buys.length === 0) {
+      let costBasis = 0;
+      let profit = 0;
+      g.sells.forEach(sTx => {
+        const realized = realizedPLMap.get(sTx);
+        if (realized) {
+          costBasis += (realized.costBasis !== undefined ? realized.costBasis : (sTx.shares * sTx.price - realized.profit));
+          profit += realized.profit;
+        } else {
+          costBasis += (sTx.shares * sTx.price);
+        }
+      });
+      const proceeds = g.totalSellProceeds;
+      totalCost += costBasis;
+      totalCurrentValOrProceeds += proceeds;
+      totalProfitD += profit;
+      totalRealizedProfitD += profit;
+    }
+    // Case C: Both Buys & Sells for this ticker in selection
+    else if (g.buys.length > 0 && g.sells.length > 0) {
+      const avgBuyCost = g.totalBuyShares > 0 ? (g.totalBuyCost / g.totalBuyShares) : 0;
+      
+      if (g.totalBuyShares >= g.totalSellShares) {
+        // Sold shares covered by selected buys
+        const costOfSold = g.totalSellShares * avgBuyCost;
+        const realizedProfit = g.totalSellProceeds - costOfSold;
+
+        const remainingShares = g.totalBuyShares - g.totalSellShares;
+        const curPrice = livePrice !== null ? livePrice : avgBuyCost;
+        const remainingVal = remainingShares * curPrice;
+        const remainingCost = remainingShares * avgBuyCost;
+        const unrealizedProfit = remainingVal - remainingCost;
+
+        totalCost += g.totalBuyCost;
+        totalCurrentValOrProceeds += (g.totalSellProceeds + remainingVal);
+        totalProfitD += (realizedProfit + unrealizedProfit);
+        totalRealizedProfitD += realizedProfit;
+        totalUnrealizedProfitD += unrealizedProfit;
+      } else {
+        // Sold more than selected buys
+        const costOfSoldFromSelected = g.totalBuyShares * avgBuyCost;
+        const realizedFromSelected = (g.totalBuyShares * (g.totalSellProceeds / (g.totalSellShares || 1))) - costOfSoldFromSelected;
+
+        let extraCostBasis = 0;
+        let extraProfit = 0;
+        g.sells.forEach(sTx => {
+          const r = realizedPLMap.get(sTx);
+          if (r) {
+            extraCostBasis += (r.costBasis || 0);
+            extraProfit += r.profit;
+          }
+        });
+        totalCost += (costOfSoldFromSelected + Math.max(0, extraCostBasis - costOfSoldFromSelected));
+        totalCurrentValOrProceeds += g.totalSellProceeds;
+        totalProfitD += (realizedFromSelected + extraProfit);
+        totalRealizedProfitD += (realizedFromSelected + extraProfit);
+      }
+    }
+  });
+
+  const totalReturnPct = totalCost > 0 ? (totalProfitD / totalCost) * 100 : 0;
+
+  // Build Description in Header
+  let detailsText = '';
+  if (tickerKeys.length === 1) {
+    const tick = tickerKeys[0];
+    const g = tickerGroups[tick];
+    const parts = [];
+    if (g.buys.length) parts.push(`${g.buys.length} Buy`);
+    if (g.sells.length) parts.push(`${g.sells.length} Sell`);
+    detailsText = `${tick} · ${parts.join(', ')}`;
+  } else if (tickerKeys.length > 1) {
+    detailsText = `${tickerKeys.join(', ')} · ${totalBuyCount} Buy, ${totalSellCount} Sell`;
+  } else if (cashTransferCount > 0) {
+    detailsText = `Cash Transfers (${cashTransferCount} items)`;
+  }
+  if (cashTransferCount > 0 && tickerKeys.length > 0) {
+    detailsText += ` + ${cashTransferCount} Cash item(s)`;
+  }
+  detailsEl.textContent = detailsText;
+
+  // Build Metrics
+  let metricsHtml = '';
+
+  if (tickerKeys.length > 0) {
+    const valLabel = (totalBuyCount > 0 && totalSellCount === 0) ? 'Current Value' : (totalSellCount > 0 && totalBuyCount === 0 ? 'Total Proceeds' : 'Value / Proceeds');
+    const plClass = colorClass(totalProfitD);
+    const sign = totalProfitD >= 0 ? '+' : '-';
+    const plSignStr = `${sign}$${Math.abs(totalProfitD).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+    const plPctSignStr = `${fmtSign(totalReturnPct)}%`;
+
+    metricsHtml += `
+      <div class="txn-sum-stat">
+        <span class="txn-sum-stat-lbl">Total Cost</span>
+        <span class="txn-sum-stat-val money-val" title="Click to view in THB" onclick="showMoneyPopover(${totalCost}, event, 'Selected Total Cost')">$${totalCost.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</span>
+      </div>
+      <div class="txn-sum-stat">
+        <span class="txn-sum-stat-lbl">${valLabel}</span>
+        <span class="txn-sum-stat-val money-val" title="Click to view in THB" onclick="showMoneyPopover(${totalCurrentValOrProceeds}, event, 'Selected Value')">$${totalCurrentValOrProceeds.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</span>
+      </div>
+      <div class="txn-sum-stat">
+        <span class="txn-sum-stat-lbl">Profit / Loss ($)</span>
+        <span class="txn-sum-stat-val money-val ${plClass}" title="Click to view in THB" onclick="showMoneyPopover(${totalProfitD}, event, 'Selected Total P/L')">${plSignStr}</span>
+      </div>
+      <div class="txn-sum-stat">
+        <span class="txn-sum-stat-lbl">Return (%)</span>
+        <span class="txn-sum-stat-val ${plClass}" style="font-size: 16px; font-weight: 700;">${plPctSignStr}</span>
+      </div>
+    `;
+
+    // If single ticker and only Buys: show Avg Buy Price
+    if (tickerKeys.length === 1 && totalBuyCount > 0 && totalSellCount === 0) {
+      const g = tickerGroups[tickerKeys[0]];
+      const avgPrice = g.totalBuyShares > 0 ? (g.totalBuyCost / g.totalBuyShares) : 0;
+      metricsHtml += `
+        <div class="txn-sum-stat">
+          <span class="txn-sum-stat-lbl">Avg Buy Price</span>
+          <span class="txn-sum-stat-val">$${avgPrice.toFixed(2)} <span style="font-size:11px; color:var(--muted); font-weight:normal;">(${g.totalBuyShares.toLocaleString()} shs)</span></span>
+        </div>
+      `;
+    }
+
+    // If single ticker and only Sells: show Avg Sell Price
+    if (tickerKeys.length === 1 && totalSellCount > 0 && totalBuyCount === 0) {
+      const g = tickerGroups[tickerKeys[0]];
+      const avgSell = g.totalSellShares > 0 ? (g.totalSellProceeds / g.totalSellShares) : 0;
+      metricsHtml += `
+        <div class="txn-sum-stat">
+          <span class="txn-sum-stat-lbl">Avg Sell Price</span>
+          <span class="txn-sum-stat-val">$${avgSell.toFixed(2)} <span style="font-size:11px; color:var(--muted); font-weight:normal;">(${g.totalSellShares.toLocaleString()} shs)</span></span>
+        </div>
+      `;
+    }
+
+    // If mixed Buys and Sells: show breakdown badge
+    if (totalBuyCount > 0 && totalSellCount > 0) {
+      metricsHtml += `
+        <div style="font-size: 11px; color: var(--muted); align-self: center; margin-top: 4px; padding: 4px 8px; background: var(--bg2); border-radius: 6px; border: 1px solid var(--border);">
+          Breakdown: Realized <span class="${colorClass(totalRealizedProfitD)}">${totalRealizedProfitD >= 0?'+':''}$${Math.abs(totalRealizedProfitD).toFixed(2)}</span> · Unrealized <span class="${colorClass(totalUnrealizedProfitD)}">${totalUnrealizedProfitD >= 0?'+':''}$${Math.abs(totalUnrealizedProfitD).toFixed(2)}</span>
+        </div>
+      `;
+    }
+  } else if (cashTransferCount > 0) {
+    const cashSign = cashTransferSum >= 0 ? '+' : '-';
+    metricsHtml += `
+      <div class="txn-sum-stat">
+        <span class="txn-sum-stat-lbl">Net Cash Flow</span>
+        <span class="txn-sum-stat-val money-val ${colorClass(cashTransferSum)}" title="Click to view in THB" onclick="showMoneyPopover(${cashTransferSum}, event, 'Net Cash Flow')">${cashSign}$${Math.abs(cashTransferSum).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</span>
+      </div>
+      <div style="font-size: 11px; color: var(--muted); align-self: center;">(Cash deposits and withdrawals have 0% trading P/L)</div>
+    `;
+  }
+
+  metricsEl.innerHTML = metricsHtml;
 }
 function addTransaction() {
   const date = document.getElementById('txn-date').value;
@@ -1941,6 +2372,7 @@ function handleImportFile(event) {
       const confirmed = await showConfirm(`Import ${imported.length} transactions and replace current portfolio?`);
       if (!confirmed) return;
       transactions = imported.map(tx => ({ date: tx.date, ticker: tx.ticker.trim().toUpperCase(), action: tx.action, shares: Number(tx.shares), price: Number(tx.price) }));
+      selectedTxnSet.clear();
       saveTransactions();
       refreshPortfolio();
       showAlert('Transactions imported successfully.');
