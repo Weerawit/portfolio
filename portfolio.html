@@ -788,6 +788,32 @@
     height: 14px;
     vertical-align: middle;
   }
+  .txn-exact-wrap {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 11px;
+    color: var(--muted);
+    cursor: pointer;
+    user-select: none;
+    background: var(--bg3);
+    border: 1px solid var(--border2);
+    padding: 3px 8px;
+    border-radius: 6px;
+    transition: all 0.15s;
+    height: 25px;
+    box-sizing: border-box;
+  }
+  .txn-exact-wrap:hover {
+    background: var(--border);
+    border-color: var(--muted);
+    color: var(--text);
+  }
+  .txn-exact-wrap.active {
+    border-color: var(--accent);
+    color: var(--accent);
+    background: rgba(59, 130, 246, 0.1);
+  }
   .txn-sum-card {
     display: none;
     margin-bottom: 12px;
@@ -1117,8 +1143,12 @@
   <div class="transaction-panel">
     <div class="section-title" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
       <span>Transaction history <span id="txn-filter-indicator" style="color: var(--accent); font-size: 11px; margin-left: 8px;"></span></span>
-      <div style="display:flex; align-items:center; gap:8px;">
-        <input type="text" id="txn-search-input" placeholder="Search Ticker..." oninput="onTxnSearchInput(this.value)" style="border: 1px solid var(--border2); background: var(--bg3); color: var(--text); font-family: inherit; font-size: 12px; border-radius: 6px; padding: 4px 10px; width: 130px; outline: none;">
+      <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+        <input type="text" id="txn-search-input" placeholder="Search Ticker..." oninput="onTxnSearchInput(this.value)" style="border: 1px solid var(--border2); background: var(--bg3); color: var(--text); font-family: inherit; font-size: 12px; border-radius: 6px; padding: 4px 10px; width: 120px; outline: none;">
+        <label class="txn-exact-wrap" title="Match exact ticker symbol only (e.g. 'O' only)">
+          <input type="checkbox" id="txn-exact-match" class="txn-checkbox" style="width: 12px; height: 12px; margin: 0; cursor: pointer;" onchange="toggleTxnExactMatch(this.checked)">
+          <span>Exact</span>
+        </label>
         <button id="btn-clear-filter" class="btn" style="padding: 3px 8px; font-size: 11px; display: none;" onclick="setTxnFilter(null)">Clear</button>
       </div>
     </div>
@@ -1250,8 +1280,13 @@ let priceData = {};
 let sortCol = 'marketValue';
 let sortAsc = false;
 let colorMode = 'day';
+const TXN_EXACT_MATCH_KEY = 'portfolio_txn_exact_match_v1';
 let txnFilter = null;
 let txnSearchQuery = '';
+let txnExactMatch = false;
+try {
+  txnExactMatch = localStorage.getItem(TXN_EXACT_MATCH_KEY) === 'true';
+} catch (e) {}
 let chartHideTimer = null;
 
 // FX Conversion State
@@ -1632,12 +1667,30 @@ function onTxnSearchInput(val) {
 
 function updateTxnFilterUI() {
   const activeFilter = txnSearchQuery || txnFilter;
-  document.getElementById('txn-filter-indicator').textContent = activeFilter ? `(Filter: ${activeFilter})` : '';
+  document.getElementById('txn-filter-indicator').textContent = activeFilter ? `(Filter: ${activeFilter}${txnExactMatch ? ' [Exact]' : ''})` : '';
   document.getElementById('btn-clear-filter').style.display = activeFilter ? 'inline-block' : 'none';
   const searchInp = document.getElementById('txn-search-input');
   if (searchInp && searchInp.value !== (activeFilter || '')) {
     searchInp.value = activeFilter || '';
   }
+  const exactEl = document.getElementById('txn-exact-match');
+  if (exactEl && exactEl.checked !== txnExactMatch) {
+    exactEl.checked = txnExactMatch;
+  }
+  const exactWrap = document.querySelector('.txn-exact-wrap');
+  if (exactWrap) {
+    exactWrap.classList.toggle('active', txnExactMatch);
+  }
+}
+
+function toggleTxnExactMatch(isChecked) {
+  txnExactMatch = !!isChecked;
+  try {
+    localStorage.setItem(TXN_EXACT_MATCH_KEY, txnExactMatch ? 'true' : 'false');
+  } catch (e) {}
+  updateTxnFilterUI();
+  renderTransactions();
+  syncFilterHighlights();
 }
 
 function setTxnFilter(ticker) {
@@ -1889,11 +1942,14 @@ function renderTransactions() {
   let filtered = transactions;
   const activeFilter = (txnSearchQuery || txnFilter || '').trim().toUpperCase();
   if (activeFilter) {
-    filtered = transactions.filter(tx => tx.ticker && tx.ticker.toUpperCase().includes(activeFilter));
+    filtered = transactions.filter(tx => {
+      const sym = (tx.ticker || '').trim().toUpperCase();
+      return txnExactMatch ? sym === activeFilter : sym.includes(activeFilter);
+    });
   }
   
   if (!filtered.length) {
-    tbody.innerHTML = `<tr><td colspan="8" style="color: var(--muted); text-align:center; padding:14px;">No transactions found for ${activeFilter}.</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="8" style="color: var(--muted); text-align:center; padding:14px;">No transactions found for ${activeFilter}${txnExactMatch ? ' (Exact)' : ''}.</td></tr>`;
     currentVisibleTxns = [];
     updateTxnSelectionSummary();
     return;
@@ -1936,7 +1992,7 @@ function renderTransactions() {
     } else if (tx.action === 'withdraw') {
       actionBadge = '<span style="background:var(--loss-dim); color:var(--loss); padding:2px 7px; border-radius:4px; font-size:11px;">Withdraw</span>';
     }
-    const isRowFiltered = activeFilter && (ticker === activeFilter || ticker.includes(activeFilter));
+    const isRowFiltered = activeFilter && (txnExactMatch ? ticker === activeFilter : (ticker === activeFilter || ticker.includes(activeFilter)));
     const isSelected = selectedTxnSet.has(tx);
     const rowClass = [
       isSelected ? 'txn-selected-row' : '',
@@ -2964,6 +3020,7 @@ initFxRate();
 initPortfolios();
 loadTransactions();
 refreshPortfolio();
+updateTxnFilterUI();
 fetchPrices();
 setInterval(fetchPrices, 300000);
 setInterval(fetchExchangeRate, 300000);
