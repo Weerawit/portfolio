@@ -1283,9 +1283,12 @@ let colorMode = 'day';
 const TXN_EXACT_MATCH_KEY = 'portfolio_txn_exact_match_v1';
 let txnFilter = null;
 let txnSearchQuery = '';
-let txnExactMatch = false;
+let txnExactMatch = true;
 try {
-  txnExactMatch = localStorage.getItem(TXN_EXACT_MATCH_KEY) === 'true';
+  const savedExact = localStorage.getItem(TXN_EXACT_MATCH_KEY);
+  if (savedExact !== null) {
+    txnExactMatch = savedExact === 'true';
+  }
 } catch (e) {}
 let chartHideTimer = null;
 
@@ -1700,6 +1703,10 @@ function setTxnFilter(ticker) {
   } else {
     txnFilter = ticker;
     txnSearchQuery = ticker;
+    txnExactMatch = true;
+    try {
+      localStorage.setItem(TXN_EXACT_MATCH_KEY, 'true');
+    } catch (e) {}
   }
   updateTxnFilterUI();
   renderTransactions();
