@@ -2475,17 +2475,29 @@ async function fetchPrices() {
 
   try {
     fetchExchangeRate(); // Refresh USD/THB live rate in parallel
-    const results = await Promise.allSettled(tickers.map(fetchTickerPrice));
-    results.forEach((result, idx) => {
-      const ticker = tickers[idx];
-      if (result.status === 'fulfilled' && result.value) {
-        priceData[ticker] = result.value;
+    
+    // Fetch sequentially with 150ms delay to prevent Finnhub 429 rate limit
+    let successCount = 0;
+    for (let i = 0; i < tickers.length; i++) {
+      const ticker = tickers[i];
+      document.getElementById('last-updated-text').textContent = `Fetching prices (${i + 1}/${tickers.length})…`;
+      try {
+        const val = await fetchTickerPrice(ticker);
+        if (val) {
+          priceData[ticker] = val;
+          successCount++;
+        }
+      } catch (err) {
+        console.warn(`Failed to fetch ${ticker}:`, err);
       }
-    });
+      if (i < tickers.length - 1) {
+        await new Promise(r => setTimeout(r, 150));
+      }
+    }
 
     dot.classList.remove('spinning');
     dot2.classList.remove('spinning');
-    document.getElementById('last-updated-text').textContent = `Last updated: ${new Date().toLocaleTimeString()} · Prices via Finnhub`;
+    document.getElementById('last-updated-text').textContent = `Last updated: ${new Date().toLocaleTimeString()} · Prices via Finnhub (${successCount}/${tickers.length})`;
     renderTable();
     renderTransactions(); // Refresh transactions to show Gain %
     renderMap();
@@ -2498,12 +2510,45 @@ async function fetchPrices() {
   }
 }
 
+// Local cache for company profile to avoid redundant profile2 requests
+const PROFILE_CACHE_KEY = 'portfolio_profile_cache_v1';
+function getCachedProfile(ticker) {
+  try {
+    const raw = localStorage.getItem(PROFILE_CACHE_KEY);
+    if (!raw) return null;
+    const cache = JSON.parse(raw);
+    return cache[ticker] || null;
+  } catch (e) {
+    return null;
+  }
+}
+
+function setCachedProfile(ticker, data) {
+  try {
+    const raw = localStorage.getItem(PROFILE_CACHE_KEY);
+    const cache = raw ? JSON.parse(raw) : {};
+    cache[ticker] = data;
+    localStorage.setItem(PROFILE_CACHE_KEY, JSON.stringify(cache));
+  } catch (e) {}
+}
+
+async function fetchWithRetry(url, maxRetries = 2) {
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    const res = await fetch(url);
+    if (res.status === 429 && attempt < maxRetries) {
+      await new Promise(r => setTimeout(r, 1200 * (attempt + 1)));
+      continue;
+    }
+    return res;
+  }
+}
+
 async function fetchTickerPrice(ticker) {
   // Map SPX to SPY (S&P 500 ETF) for Finnhub free tier compatibility
   // Finnhub free tier does not support index quotes (^GSPC)
   const apiTicker = ticker === 'SPX' ? 'SPY' : ticker;
   const quoteUrl = `${FINNHUB_BASE_URL}/api/v1/quote?symbol=${encodeURIComponent(apiTicker)}&token=${FINNHUB_API_KEY}`;
-  const quoteRes = await fetch(quoteUrl);
+  const quoteRes = await fetchWithRetry(quoteUrl);
   if (!quoteRes.ok) throw new Error(`Quote HTTP ${quoteRes.status}`);
   const quote = await quoteRes.json();
   
@@ -2520,26 +2565,33 @@ async function fetchTickerPrice(ticker) {
   let industry = 'Unspecified';
   let marketCap = null;
 
+  const cachedProf = getCachedProfile(ticker);
+
   if (ticker === 'SPX') {
     name = 'S&P 500 (Proxy via SPY)';
     industry = 'Index ETF';
   } else if (TICKER_META[ticker]) {
     name = TICKER_META[ticker].name;
     industry = TICKER_META[ticker].industry;
+  } else if (cachedProf) {
+    name = cachedProf.name || ticker;
+    industry = cachedProf.industry || 'Unspecified';
+    marketCap = cachedProf.marketCap || null;
   } else if (priceData[ticker] && priceData[ticker].name && priceData[ticker].name !== ticker) {
     name = priceData[ticker].name;
     industry = priceData[ticker].industry;
     marketCap = priceData[ticker].marketCap;
   } else {
-    // Fetch profile only if needed (e.g., first time or not in META)
+    // Fetch profile only if needed (not cached yet)
     try {
       const profileUrl = `${FINNHUB_BASE_URL}/api/v1/stock/profile2?symbol=${encodeURIComponent(ticker)}&token=${FINNHUB_API_KEY}`;
-      const profileRes = await fetch(profileUrl);
+      const profileRes = await fetchWithRetry(profileUrl, 1);
       if (profileRes.ok) {
         const profile = await profileRes.json();
         marketCap = profile?.marketCapitalization || profile?.marketCap || null;
         industry = profile?.finnhubIndustry || profile?.industry || 'Unspecified';
         name = profile?.name || ticker;
+        setCachedProfile(ticker, { name, industry, marketCap });
       }
     } catch (e) {
       console.warn(`Profile fetch failed for ${ticker}`, e);
