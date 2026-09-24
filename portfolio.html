@@ -1258,6 +1258,7 @@ const ACTIVE_PORTFOLIO_KEY = 'active_portfolio_id_v2';
 const TXN_PREFIX = 'portfolio_txns_';
 
 const FINNHUB_API_KEY = 'd7rkrkhr01qviakd6nd0d7rkrkhr01qviakd6ndg';
+const FINNHUB_BASE_URL = 'https://finnhub-proxy.weerawit.workers.dev';
 const TICKER_META = {
   NVO:{name:'Novo Nordisk ADR', industry:'Drug Manufacturers'}
 };
@@ -2501,7 +2502,7 @@ async function fetchTickerPrice(ticker) {
   // Map SPX to SPY (S&P 500 ETF) for Finnhub free tier compatibility
   // Finnhub free tier does not support index quotes (^GSPC)
   const apiTicker = ticker === 'SPX' ? 'SPY' : ticker;
-  const quoteUrl = `https://finnhub.io/api/v1/quote?symbol=${encodeURIComponent(apiTicker)}&token=${FINNHUB_API_KEY}`;
+  const quoteUrl = `${FINNHUB_BASE_URL}/api/v1/quote?symbol=${encodeURIComponent(apiTicker)}&token=${FINNHUB_API_KEY}`;
   const quoteRes = await fetch(quoteUrl);
   if (!quoteRes.ok) throw new Error(`Quote HTTP ${quoteRes.status}`);
   const quote = await quoteRes.json();
@@ -2532,7 +2533,7 @@ async function fetchTickerPrice(ticker) {
   } else {
     // Fetch profile only if needed (e.g., first time or not in META)
     try {
-      const profileUrl = `https://finnhub.io/api/v1/stock/profile2?symbol=${encodeURIComponent(ticker)}&token=${FINNHUB_API_KEY}`;
+      const profileUrl = `${FINNHUB_BASE_URL}/api/v1/stock/profile2?symbol=${encodeURIComponent(ticker)}&token=${FINNHUB_API_KEY}`;
       const profileRes = await fetch(profileUrl);
       if (profileRes.ok) {
         const profile = await profileRes.json();
