@@ -1258,7 +1258,7 @@ const ACTIVE_PORTFOLIO_KEY = 'active_portfolio_id_v2';
 const TXN_PREFIX = 'portfolio_txns_';
 
 const FINNHUB_API_KEY = 'd7rkrkhr01qviakd6nd0d7rkrkhr01qviakd6ndg';
-const FINNHUB_BASE_URL = 'https://finnhub-proxy.weerawit.workers.dev';
+const FINNHUB_BASE_URL = 'https://finnhub.io';
 const TICKER_META = {
   NVO:{name:'Novo Nordisk ADR', industry:'Drug Manufacturers'}
 };
@@ -2517,25 +2517,16 @@ async function fetchPrices() {
   try {
     fetchExchangeRate(); // Refresh USD/THB live rate in parallel
     
-    // Fetch sequentially with 150ms delay to prevent Finnhub 429 rate limit
+    // Fetch in parallel for fast update
+    const results = await Promise.allSettled(tickers.map(fetchTickerPrice));
     let successCount = 0;
-    for (let i = 0; i < tickers.length; i++) {
-      const ticker = tickers[i];
-      document.getElementById('last-updated-text').textContent = `Fetching prices (${i + 1}/${tickers.length})…`;
-      try {
-        const val = await fetchTickerPrice(ticker);
-        if (val) {
-          priceData[ticker] = val;
-          successCount++;
-          savePriceCache(); // Persist immediately after each ticker
-        }
-      } catch (err) {
-        console.warn(`Failed to fetch ${ticker}:`, err);
+    results.forEach((res, idx) => {
+      const ticker = tickers[idx];
+      if (res.status === 'fulfilled' && res.value) {
+        priceData[ticker] = res.value;
+        successCount++;
       }
-      if (i < tickers.length - 1) {
-        await new Promise(r => setTimeout(r, 150));
-      }
-    }
+    });
 
     dot.classList.remove('spinning');
     dot2.classList.remove('spinning');
@@ -2543,7 +2534,7 @@ async function fetchPrices() {
       savePriceCache();
       document.getElementById('last-updated-text').textContent = `Last updated: ${new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})} · Prices via Finnhub (${successCount}/${tickers.length})`;
     } else if (Object.keys(priceData).length > 0) {
-      document.getElementById('last-updated-text').textContent = `Rate limited · Using cached prices (${lastPriceCacheTime ? lastPriceCacheTime.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : 'saved'})`;
+      document.getElementById('last-updated-text').textContent = `Using cached prices (${lastPriceCacheTime ? lastPriceCacheTime.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : 'saved'})`;
     } else {
       document.getElementById('last-updated-text').textContent = 'Unable to fetch live prices from Finnhub.';
     }
@@ -2585,23 +2576,12 @@ function setCachedProfile(ticker, data) {
   } catch (e) {}
 }
 
-async function fetchWithRetry(url, maxRetries = 2) {
-  for (let attempt = 0; attempt <= maxRetries; attempt++) {
-    const res = await fetch(url);
-    if (res.status === 429 && attempt < maxRetries) {
-      await new Promise(r => setTimeout(r, 1200 * (attempt + 1)));
-      continue;
-    }
-    return res;
-  }
-}
-
 async function fetchTickerPrice(ticker) {
   // Map SPX to SPY (S&P 500 ETF) for Finnhub free tier compatibility
   // Finnhub free tier does not support index quotes (^GSPC)
   const apiTicker = ticker === 'SPX' ? 'SPY' : ticker;
   const quoteUrl = `${FINNHUB_BASE_URL}/api/v1/quote?symbol=${encodeURIComponent(apiTicker)}&token=${FINNHUB_API_KEY}`;
-  const quoteRes = await fetchWithRetry(quoteUrl);
+  const quoteRes = await fetch(quoteUrl);
   if (!quoteRes.ok) throw new Error(`Quote HTTP ${quoteRes.status}`);
   const quote = await quoteRes.json();
   
@@ -2638,7 +2618,7 @@ async function fetchTickerPrice(ticker) {
     // Fetch profile only if needed (not cached yet)
     try {
       const profileUrl = `${FINNHUB_BASE_URL}/api/v1/stock/profile2?symbol=${encodeURIComponent(ticker)}&token=${FINNHUB_API_KEY}`;
-      const profileRes = await fetchWithRetry(profileUrl, 1);
+      const profileRes = await fetch(profileUrl);
       if (profileRes.ok) {
         const profile = await profileRes.json();
         marketCap = profile?.marketCapitalization || profile?.marketCap || null;
