@@ -1248,7 +1248,7 @@
 
 <div class="last-updated">
   <span class="refresh-dot" id="refresh-dot2"></span>
-  <span id="last-updated-text">Fetching live prices via Yahoo Finance…</span>
+  <span id="last-updated-text">Loading portfolio…</span>
 </div>
 
 <script>
@@ -1277,7 +1277,44 @@ let currentVisibleTxns = [];
 let PORTFOLIO = [];
 let CASH_BALANCE = 0;
 let REALIZED_PL_MAP = new Map();
-let priceData = {};
+const PRICE_CACHE_KEY = 'portfolio_price_cache_v2';
+let lastPriceCacheTime = null;
+
+function loadPriceCache() {
+  try {
+    const raw = localStorage.getItem(PRICE_CACHE_KEY);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw);
+    if (parsed && typeof parsed === 'object') {
+      if (parsed.timestamp) {
+        lastPriceCacheTime = new Date(parsed.timestamp);
+      }
+      if (parsed.data && typeof parsed.data === 'object') {
+        return parsed.data;
+      }
+      return parsed;
+    }
+    return {};
+  } catch (e) {
+    console.warn('Failed to load price cache', e);
+    return {};
+  }
+}
+
+function savePriceCache() {
+  try {
+    lastPriceCacheTime = new Date();
+    const payload = {
+      timestamp: lastPriceCacheTime.getTime(),
+      data: priceData
+    };
+    localStorage.setItem(PRICE_CACHE_KEY, JSON.stringify(payload));
+  } catch (e) {
+    console.warn('Failed to save price cache', e);
+  }
+}
+
+let priceData = loadPriceCache();
 let sortCol = 'marketValue';
 let sortAsc = false;
 let colorMode = 'day';
@@ -2453,7 +2490,11 @@ async function fetchPrices() {
   const dot2 = document.getElementById('refresh-dot2');
   dot.classList.add('spinning');
   dot2.classList.add('spinning');
-  document.getElementById('last-updated-text').textContent = 'Fetching prices from Finnhub…';
+  if (lastPriceCacheTime && Object.keys(priceData).length > 0) {
+    document.getElementById('last-updated-text').textContent = `Updating prices… (cached: ${lastPriceCacheTime.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})})`;
+  } else {
+    document.getElementById('last-updated-text').textContent = 'Fetching prices from Finnhub…';
+  }
 
   // Get portfolio tickers and add SPX
   const tickers = [...new Set(PORTFOLIO.map(p => p.ticker).filter(Boolean))];
@@ -2486,6 +2527,7 @@ async function fetchPrices() {
         if (val) {
           priceData[ticker] = val;
           successCount++;
+          savePriceCache(); // Persist immediately after each ticker
         }
       } catch (err) {
         console.warn(`Failed to fetch ${ticker}:`, err);
@@ -2497,7 +2539,14 @@ async function fetchPrices() {
 
     dot.classList.remove('spinning');
     dot2.classList.remove('spinning');
-    document.getElementById('last-updated-text').textContent = `Last updated: ${new Date().toLocaleTimeString()} · Prices via Finnhub (${successCount}/${tickers.length})`;
+    if (successCount > 0) {
+      savePriceCache();
+      document.getElementById('last-updated-text').textContent = `Last updated: ${new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})} · Prices via Finnhub (${successCount}/${tickers.length})`;
+    } else if (Object.keys(priceData).length > 0) {
+      document.getElementById('last-updated-text').textContent = `Rate limited · Using cached prices (${lastPriceCacheTime ? lastPriceCacheTime.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : 'saved'})`;
+    } else {
+      document.getElementById('last-updated-text').textContent = 'Unable to fetch live prices from Finnhub.';
+    }
     renderTable();
     renderTransactions(); // Refresh transactions to show Gain %
     renderMap();
@@ -2505,7 +2554,11 @@ async function fetchPrices() {
   } catch (e) {
     dot.classList.remove('spinning');
     dot2.classList.remove('spinning');
-    document.getElementById('last-updated-text').textContent = 'Unable to fetch live prices from Finnhub.';
+    if (Object.keys(priceData).length > 0) {
+      document.getElementById('last-updated-text').textContent = `Using cached prices (${lastPriceCacheTime ? lastPriceCacheTime.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : 'saved'})`;
+    } else {
+      document.getElementById('last-updated-text').textContent = 'Unable to fetch live prices from Finnhub.';
+    }
     console.warn('Price refresh failed', e);
   }
 }
@@ -3081,6 +3134,9 @@ initPortfolios();
 loadTransactions();
 refreshPortfolio();
 updateTxnFilterUI();
+if (lastPriceCacheTime && Object.keys(priceData).length > 0) {
+  document.getElementById('last-updated-text').textContent = `Loaded cached prices (${lastPriceCacheTime.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}) · Updating live…`;
+}
 fetchPrices();
 setInterval(fetchPrices, 300000);
 setInterval(fetchExchangeRate, 300000);
