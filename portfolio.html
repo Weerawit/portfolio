@@ -2711,9 +2711,11 @@ async function fetchPricesTradingView(tickers) {
       columns: ["close", "change", "change_abs", "description"]
     };
 
+    // Use text/plain to qualify as a simple CORS request and avoid OPTIONS preflight
+    // (TradingView scanner returns access-control-allow-headers: Referer,Accept which blocks application/json)
     const res = await fetch('https://scanner.tradingview.com/thailand/scan', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'text/plain' },
       body: JSON.stringify(payload)
     });
 
