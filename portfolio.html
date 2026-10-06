@@ -1477,11 +1477,11 @@ function initFxRate() {
 function updateFxDisplay() {
   const hdrFxRate = document.getElementById('hdr-fx-rate');
   if (hdrFxRate) {
-    hdrFxRate.textContent = `${usdThbRate.toFixed(2)}${isCustomRate ? '*' : ''}`;
+    hdrFxRate.textContent = `${usdThbRate.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}${isCustomRate ? '*' : ''}`;
   }
   const badge = document.getElementById('fx-header-badge');
   if (badge) {
-    badge.title = `USD/THB: 1 USD = ${usdThbRate.toFixed(2)} THB (${isCustomRate ? 'Custom rate · Click to view/edit' : 'Live rate · Click to view/edit'})`;
+    badge.title = `USD/THB: 1 USD = ${usdThbRate.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} THB (${isCustomRate ? 'Custom rate · Click to view/edit' : 'Live rate · Click to view/edit'})`;
   }
 }
 
@@ -1547,7 +1547,7 @@ function renderPopoverContent() {
   document.getElementById('pop-title').textContent = currentPopLabel;
   
   const usdFormatted = `${sign}$${absUsd.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-  const thbFormatted = `${sign}฿${absThb.toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  const thbFormatted = `${sign}฿${absThb.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
   const usdEl = document.getElementById('pop-val-usd');
   const thbEl = document.getElementById('pop-val-thb');
@@ -1566,7 +1566,7 @@ function renderPopoverContent() {
     thbEl.style.color = '#38bdf8';
   }
 
-  document.getElementById('pop-rate-badge').textContent = `1 USD = ${usdThbRate.toFixed(2)} THB${isCustomRate ? ' (Custom)' : ' (Live)'}`;
+  document.getElementById('pop-rate-badge').textContent = `1 USD = ${usdThbRate.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} THB${isCustomRate ? ' (Custom)' : ' (Live)'}`;
   document.getElementById('pop-rate-input').value = usdThbRate.toFixed(2);
   
   const timeStr = lastFxUpdated ? `Updated: ${lastFxUpdated.toLocaleTimeString()}` : 'Live Rate';
@@ -1992,18 +1992,22 @@ function cancelHideChart() {
 
 function fmt(n, dec=2) {
   if (n === undefined || n === null || isNaN(n)) return '—';
-  return n.toFixed(dec);
+  return Number(n).toLocaleString('en-US', { minimumFractionDigits: dec, maximumFractionDigits: dec });
 }
 function fmtMoney(n) {
   if (n === undefined || n === null || isNaN(n)) return '—';
   const sym = getCurrencySymbol();
   const abs = Math.abs(n);
-  if (abs >= 1000000) return (n < 0 ? '-' : '') + sym + (abs / 1000000).toFixed(2) + 'M';
   return (n < 0 ? '-' : '') + sym + abs.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 function fmtSign(n, suffix='') {
   if (n === undefined || n === null || isNaN(n)) return '—';
-  return (n >= 0 ? '+' : '') + n.toFixed(2) + suffix;
+  return (n >= 0 ? '+' : '') + Number(n).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + suffix;
+}
+function fmtShares(s) {
+  if (s === undefined || s === null || s === '' || isNaN(s)) return '—';
+  const num = Number(s);
+  return num.toLocaleString('en-US', { maximumFractionDigits: 4 });
 }
 function colorClass(n) {
   if (!n && n !== 0) return 'neutral';
@@ -2202,7 +2206,7 @@ function renderTransactions() {
         const currentGainPct = ((pd.price - tx.price) / tx.price) * 100;
         const currentGainD = (pd.price - tx.price) * (tx.shares || 0);
         const sign = currentGainD >= 0 ? '+' : '-';
-        const amountStr = `${sign}${sym}${Math.abs(currentGainD).toFixed(2)}`;
+        const amountStr = `${sign}${sym}${Math.abs(currentGainD).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
         const pctStr = `${fmtSign(currentGainPct)}%`;
         gainPctStr = `<span class="${colorClass(currentGainPct)} money-val" title="Click to view in ${altCurr}" onclick="event.stopPropagation(); showMoneyPopover(${currentGainD}, event, '${ticker} Unrealized Gain')">${amountStr} (${pctStr})</span>`;
       }
@@ -2212,7 +2216,7 @@ function renderTransactions() {
       if (realized) {
         const profit = realized.profit;
         const sign = profit >= 0 ? '+' : '-';
-        const amountStr = `${sign}${sym}${Math.abs(profit).toFixed(2)}`;
+        const amountStr = `${sign}${sym}${Math.abs(profit).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
         const pctStr = `${fmtSign(realized.profitPct)}%`;
         gainPctStr = `<span class="${colorClass(profit)} money-val" title="Click to view in ${altCurr}" onclick="event.stopPropagation(); showMoneyPopover(${profit}, event, '${ticker} Realized P/L')">${amountStr} (${pctStr})</span>`;
       }
@@ -2236,8 +2240,8 @@ function renderTransactions() {
         <td>${formatDate(tx.date)}</td>
         <td><span class="tick-badge" onclick="event.stopPropagation(); setTxnFilter('${ticker}')" title="Filter by ${ticker}">${ticker}</span></td>
         <td>${actionBadge}</td>
-        <td>${tx.shares || '—'}</td>
-        <td class="money-val" title="Click to view in ${altCurr}" onclick="event.stopPropagation(); showMoneyPopover(${tx.price}, event, '${ticker} Txn Price')">${sym}${tx.price.toFixed(2)}</td>
+        <td>${fmtShares(tx.shares)}</td>
+        <td class="money-val" title="Click to view in ${altCurr}" onclick="event.stopPropagation(); showMoneyPopover(${tx.price}, event, '${ticker} Txn Price')">${sym}${tx.price.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
         <td>${gainPctStr}</td>
         <td><button class="tx-delete-btn" onclick="deleteTransaction(${originalIndex}); event.stopPropagation();">Delete</button></td>
       </tr>`;
@@ -2338,7 +2342,7 @@ function updateTxnSelectionSummary() {
   }
 
   summaryEl.style.display = 'block';
-  countBadge.textContent = `${selectedCount} Selected`;
+  countBadge.textContent = `${selectedCount.toLocaleString('en-US')} Selected`;
 
   const { realizedPLMap } = buildHoldingsFromTransactions();
 
@@ -2482,16 +2486,16 @@ function updateTxnSelectionSummary() {
     const tick = tickerKeys[0];
     const g = tickerGroups[tick];
     const parts = [];
-    if (g.buys.length) parts.push(`${g.buys.length} Buy`);
-    if (g.sells.length) parts.push(`${g.sells.length} Sell`);
+    if (g.buys.length) parts.push(`${g.buys.length.toLocaleString('en-US')} Buy (${fmtShares(g.totalBuyShares)} shs)`);
+    if (g.sells.length) parts.push(`${g.sells.length.toLocaleString('en-US')} Sell (${fmtShares(g.totalSellShares)} shs)`);
     detailsText = `${tick} · ${parts.join(', ')}`;
   } else if (tickerKeys.length > 1) {
-    detailsText = `${tickerKeys.join(', ')} · ${totalBuyCount} Buy, ${totalSellCount} Sell`;
+    detailsText = `${tickerKeys.join(', ')} · ${totalBuyCount.toLocaleString('en-US')} Buy, ${totalSellCount.toLocaleString('en-US')} Sell`;
   } else if (cashTransferCount > 0) {
-    detailsText = `Cash Transfers (${cashTransferCount} items)`;
+    detailsText = `Cash Transfers (${cashTransferCount.toLocaleString('en-US')} items)`;
   }
   if (cashTransferCount > 0 && tickerKeys.length > 0) {
-    detailsText += ` + ${cashTransferCount} Cash item(s)`;
+    detailsText += ` + ${cashTransferCount.toLocaleString('en-US')} Cash item(s)`;
   }
   detailsEl.textContent = detailsText;
 
@@ -2534,7 +2538,7 @@ function updateTxnSelectionSummary() {
       metricsHtml += `
         <div class="txn-sum-stat">
           <span class="txn-sum-stat-lbl">Avg Buy Price</span>
-          <span class="txn-sum-stat-val">${sym}${avgPrice.toFixed(2)} <span style="font-size:11px; color:var(--muted); font-weight:normal;">(${g.totalBuyShares.toLocaleString()} shs)</span></span>
+          <span class="txn-sum-stat-val">${sym}${avgPrice.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} <span style="font-size:11px; color:var(--muted); font-weight:normal;">(${fmtShares(g.totalBuyShares)} shs)</span></span>
         </div>
       `;
     }
@@ -2546,7 +2550,7 @@ function updateTxnSelectionSummary() {
       metricsHtml += `
         <div class="txn-sum-stat">
           <span class="txn-sum-stat-lbl">Avg Sell Price</span>
-          <span class="txn-sum-stat-val">${sym}${avgSell.toFixed(2)} <span style="font-size:11px; color:var(--muted); font-weight:normal;">(${g.totalSellShares.toLocaleString()} shs)</span></span>
+          <span class="txn-sum-stat-val">${sym}${avgSell.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} <span style="font-size:11px; color:var(--muted); font-weight:normal;">(${fmtShares(g.totalSellShares)} shs)</span></span>
         </div>
       `;
     }
@@ -2555,7 +2559,7 @@ function updateTxnSelectionSummary() {
     if (totalBuyCount > 0 && totalSellCount > 0) {
       metricsHtml += `
         <div style="font-size: 11px; color: var(--muted); align-self: center; margin-top: 4px; padding: 4px 8px; background: var(--bg2); border-radius: 6px; border: 1px solid var(--border);">
-          Breakdown: Realized <span class="${colorClass(totalRealizedProfitD)}">${totalRealizedProfitD >= 0?'+':''}${sym}${Math.abs(totalRealizedProfitD).toFixed(2)}</span> · Unrealized <span class="${colorClass(totalUnrealizedProfitD)}">${totalUnrealizedProfitD >= 0?'+':''}${sym}${Math.abs(totalUnrealizedProfitD).toFixed(2)}</span>
+          Breakdown: Realized <span class="${colorClass(totalRealizedProfitD)}">${totalRealizedProfitD >= 0?'+':''}${sym}${Math.abs(totalRealizedProfitD).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span> · Unrealized <span class="${colorClass(totalUnrealizedProfitD)}">${totalUnrealizedProfitD >= 0?'+':''}${sym}${Math.abs(totalUnrealizedProfitD).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
         </div>
       `;
     }
@@ -2657,7 +2661,7 @@ function handleImportFile(event) {
       if (!Array.isArray(imported)) throw new Error('JSON must be an array of transactions');
       const valid = imported.every(tx => tx && typeof tx.date === 'string' && typeof tx.ticker === 'string' && typeof tx.action === 'string' && (typeof tx.shares === 'number' || (typeof tx.shares === 'string' && !isNaN(tx.shares))) && (typeof tx.price === 'number' || (typeof tx.price === 'string' && !isNaN(tx.price))));
       if (!valid) throw new Error('Transaction data is malformed');
-      const confirmed = await showConfirm(`Import ${imported.length} transactions and replace current portfolio?`);
+      const confirmed = await showConfirm(`Import ${imported.length.toLocaleString('en-US')} transactions and replace current portfolio?`);
       if (!confirmed) return;
       transactions = imported.map(tx => ({ date: tx.date, ticker: tx.ticker.trim().toUpperCase(), action: tx.action, shares: Number(tx.shares), price: Number(tx.price) }));
       selectedTxnSet.clear();
@@ -2734,7 +2738,7 @@ async function fetchPricesTradingView(tickers) {
           if (s === 'SET:SET') {
             const benchHdr = document.getElementById('hdr-spx');
             if (benchHdr && close !== undefined) {
-              benchHdr.innerHTML = `${close.toLocaleString([], {minimumFractionDigits:2, maximumFractionDigits:2})} <span class="${colorClass(changePct)}" style="font-size:11px;">(${fmtSign(changePct)}%)</span>`;
+              benchHdr.innerHTML = `${close.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})} <span class="${colorClass(changePct)}" style="font-size:11px;">(${fmtSign(changePct)}%)</span>`;
             }
           } else if (rawTicker) {
             if (close !== undefined && close !== null) {
@@ -2764,7 +2768,7 @@ async function fetchPricesTradingView(tickers) {
   const totalHoldings = validTickers.length;
   if (successCount > 0 || totalHoldings === 0) {
     savePriceCache();
-    document.getElementById('last-updated-text').textContent = `Last updated: ${new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})} · Prices via TradingView (${successCount}/${totalHoldings})`;
+    document.getElementById('last-updated-text').textContent = `Last updated: ${new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})} · Prices via TradingView (${successCount.toLocaleString('en-US')}/${totalHoldings.toLocaleString('en-US')})`;
   } else if (Object.keys(priceData).length > 0) {
     document.getElementById('last-updated-text').textContent = `Using cached prices (${lastPriceCacheTime ? lastPriceCacheTime.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : 'saved'}) · Click ✏️ to edit`;
   } else {
@@ -2816,7 +2820,7 @@ async function fetchPricesFinnhub(tickers) {
     dot2.classList.remove('spinning');
     if (successCount > 0) {
       savePriceCache();
-      document.getElementById('last-updated-text').textContent = `Last updated: ${new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})} · Prices via Finnhub (${successCount}/${finnhubTickers.length})`;
+      document.getElementById('last-updated-text').textContent = `Last updated: ${new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})} · Prices via Finnhub (${successCount.toLocaleString('en-US')}/${finnhubTickers.length.toLocaleString('en-US')})`;
     } else if (Object.keys(priceData).length > 0) {
       document.getElementById('last-updated-text').textContent = `Using cached prices (${lastPriceCacheTime ? lastPriceCacheTime.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : 'saved'})`;
     } else {
@@ -2964,18 +2968,18 @@ function renderTable() {
       ? `<span class="${r.changePct >= 0 ? 'tag-gain':'tag-loss'}">${fmtSign(r.changePct)}%</span>`
       : '<span class="loading-price">…</span>';
     const mvStr = r.marketValue !== null ? `${sym}${r.marketValue.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})}` : '—';
-    const gainDStr = r.gainD !== null ? `<span class="${colorClass(r.gainD)}">${r.gainD >= 0?'+':''}${sym}${Math.abs(r.gainD).toFixed(2)}</span>` : '—';
+    const gainDStr = r.gainD !== null ? `<span class="${colorClass(r.gainD)}">${r.gainD >= 0?'+':''}${sym}${Math.abs(r.gainD).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})}</span>` : '—';
     const gainPctStr = r.gainPct !== null ? `<span class="${colorClass(r.gainPct)}">${fmtSign(r.gainPct)}%</span>` : '—';
-    const dayStr = r.changeD !== null ? `<span class="${colorClass(r.changeD)}">${r.changeD >= 0?'+':''}${sym}${Math.abs(r.changeD).toFixed(2)}</span>` : '—';
+    const dayStr = r.changeD !== null ? `<span class="${colorClass(r.changeD)}">${r.changeD >= 0?'+':''}${sym}${Math.abs(r.changeD).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})}</span>` : '—';
     return `<tr data-ticker="${r.ticker}" onclick="setTxnFilter('${r.ticker}')" class="${txnFilter === r.ticker ? 'selected-row' : ''}">
       <td><div class="ticker-cell"><span class="tick-badge" 
         onmouseenter="showTickerChart('${r.ticker}', event)" 
         onmouseleave="hideTickerChart()">${r.ticker}</span></div></td>
       <td class="company-name">${r.name}</td>
-      <td>${r.shares}</td>
-      <td class="money-val" title="Click to view in ${altCurr}" onclick="event.stopPropagation(); showMoneyPopover(${r.avgCost}, event, '${r.ticker} Avg Cost')">${sym}${r.avgCost.toFixed(2)}</td>
-      <td class="money-val" title="Click to view in ${altCurr}" onclick="event.stopPropagation(); showMoneyPopover(${r.totalCost}, event, '${r.ticker} Total Cost')">${sym}${r.totalCost.toFixed(2)}</td>
-      <td>${r.portfolioPct !== null ? `${r.portfolioPct.toFixed(2)}%` : '—'}</td>
+      <td>${fmtShares(r.shares)}</td>
+      <td class="money-val" title="Click to view in ${altCurr}" onclick="event.stopPropagation(); showMoneyPopover(${r.avgCost}, event, '${r.ticker} Avg Cost')">${sym}${r.avgCost.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})}</td>
+      <td class="money-val" title="Click to view in ${altCurr}" onclick="event.stopPropagation(); showMoneyPopover(${r.totalCost}, event, '${r.ticker} Total Cost')">${sym}${r.totalCost.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})}</td>
+      <td>${r.portfolioPct !== null ? `${r.portfolioPct.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}%` : '—'}</td>
       <td class="money-val" title="Click to view in ${altCurr} · Click ✏️ to edit" onclick="event.stopPropagation(); showMoneyPopover(${r.price !== undefined ? r.price : 0}, event, '${r.ticker} Price')">
         ${priceStr}
         <span onclick="event.stopPropagation(); promptEditPrice('${r.ticker}', ${r.price || 0})" title="Edit price manually" style="cursor:pointer; opacity:0.4; font-size:10px; margin-left:4px; padding:2px;">✏️</span>
@@ -2992,6 +2996,7 @@ function renderTable() {
 function renderFooter(rows) {
   const sym = getCurrencySymbol();
   const altCurr = getAltCurrency();
+  const totalShares = rows.reduce((s,r) => s + (Number(r.shares) || 0), 0);
   const totalCost = rows.reduce((s,r) => s + r.totalCost, 0);
   const totalMV = rows.reduce((s,r) => s + (r.marketValue || r.totalCost), 0);
   const totalGainD = totalMV - totalCost;
@@ -2999,16 +3004,16 @@ function renderFooter(rows) {
   const totalDayChange = rows.reduce((s,r) => s + (r.changeD || 0), 0);
   const totalDayPct = totalMV - totalDayChange ? (totalDayChange / (totalMV - totalDayChange)) * 100 : 0;
   document.getElementById('portfolio-tfoot').innerHTML = `<tr>
-    <td colspan="2">Summary: ${rows.length} Tickers</td>
-    <td></td><td></td>
+    <td colspan="2">Summary: ${rows.length.toLocaleString('en-US')} Tickers</td>
+    <td>${fmtShares(totalShares)}</td><td></td>
     <td class="money-val" title="Click to view in ${altCurr}" onclick="showMoneyPopover(${totalCost}, event, 'Total Portfolio Cost')">${sym}${totalCost.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})}</td>
     <td></td>
     <td></td>
     <td><span class="${colorClass(totalDayPct)}">${fmtSign(totalDayPct)}%</span></td>
     <td class="money-val" title="Click to view in ${altCurr}" onclick="showMoneyPopover(${totalMV}, event, 'Total Market Value')">${sym}${totalMV.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})}</td>
-    <td class="money-val" title="Click to view in ${altCurr}" onclick="showMoneyPopover(${totalGainD}, event, 'Total Portfolio Gain')"><span class="${colorClass(totalGainD)}">${totalGainD >= 0?'+':''}${sym}${Math.abs(totalGainD).toFixed(2)}</span></td>
+    <td class="money-val" title="Click to view in ${altCurr}" onclick="showMoneyPopover(${totalGainD}, event, 'Total Portfolio Gain')"><span class="${colorClass(totalGainD)}">${totalGainD >= 0?'+':''}${sym}${Math.abs(totalGainD).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})}</span></td>
     <td><span class="${colorClass(totalGainPct)}">${fmtSign(totalGainPct)}%</span></td>
-    <td class="money-val" title="Click to view in ${altCurr}" onclick="showMoneyPopover(${totalDayChange}, event, 'Total Day Change')"><span class="${colorClass(totalDayChange)}">${totalDayChange >= 0?'+':''}${sym}${Math.abs(totalDayChange).toFixed(2)}</span></td>
+    <td class="money-val" title="Click to view in ${altCurr}" onclick="showMoneyPopover(${totalDayChange}, event, 'Total Day Change')"><span class="${colorClass(totalDayChange)}">${totalDayChange >= 0?'+':''}${sym}${Math.abs(totalDayChange).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})}</span></td>
   </tr>`;
 }
 function updateSummary() {
@@ -3044,12 +3049,12 @@ function updateSummary() {
   const sumCashEl = document.getElementById('sum-cash');
   sumCashEl.textContent = sym + CASH_BALANCE.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
   sumCashEl.onclick = (e) => showMoneyPopover(CASH_BALANCE, e, 'Cash Balance');
-  document.getElementById('sum-cash-pct').textContent = `${cashPct.toFixed(2)}% of port`;
+  document.getElementById('sum-cash-pct').textContent = `${cashPct.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}% of port`;
   
   const sumMvEl = document.getElementById('sum-mv');
   sumMvEl.textContent = sym + marketValue.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
   sumMvEl.onclick = (e) => showMoneyPopover(marketValue, e, 'Market Value');
-  document.getElementById('sum-mv-sub').textContent = `${stockRows.length} positions · ${transactions.length} txns`;
+  document.getElementById('sum-mv-sub').textContent = `${stockRows.length.toLocaleString('en-US')} positions · ${transactions.length.toLocaleString('en-US')} txns`;
   
   const sumGainEl = document.getElementById('sum-gain-d');
   sumGainEl.className = 'sum-val money-val ' + colorClass(totalGainD);
@@ -3074,16 +3079,16 @@ function updateSummary() {
   document.getElementById('sum-day-pct').textContent = fmtSign(totalDayPct) + '%';
   
   const hdrNwEl = document.getElementById('hdr-nw');
-  hdrNwEl.textContent = sym + (netWorth >= 1000000 ? (netWorth / 1000000).toFixed(2) + 'M' : (netWorth / 1000).toFixed(1) + 'K');
+  hdrNwEl.textContent = sym + netWorth.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   hdrNwEl.onclick = (e) => showMoneyPopover(netWorth, e, 'Header Net Worth');
 
   const hdrMvEl = document.getElementById('hdr-mv');
-  hdrMvEl.textContent = sym + (marketValue >= 1000000 ? (marketValue / 1000000).toFixed(2) + 'M' : (marketValue / 1000).toFixed(1) + 'K');
+  hdrMvEl.textContent = sym + marketValue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   hdrMvEl.onclick = (e) => showMoneyPopover(marketValue, e, 'Header Market Value');
 
   const hdrGainEl = document.getElementById('hdr-gain');
   hdrGainEl.className = 'hstat-val money-val ' + colorClass(totalGainD);
-  hdrGainEl.textContent = (totalGainD >= 0 ? '+' : '') + sym + Math.abs(totalGainD).toFixed(0);
+  hdrGainEl.textContent = (totalGainD >= 0 ? '+' : '') + sym + Math.abs(totalGainD).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   hdrGainEl.onclick = (e) => showMoneyPopover(totalGainD, e, `Header Total Gain (${sym})`);
 
   document.getElementById('hdr-day').className = 'hstat-val ' + colorClass(totalDayPct);
@@ -3107,7 +3112,7 @@ function updateSummary() {
   const spx = priceData['SPX'];
   const benchmarkStr = (!isThb && spx && spx.changePct !== undefined) ? ` | SPX ${fmtSign(spx.changePct)}%` : '';
   
-  currentTitleBase = emoji + " " + sign + sym + Math.abs(totalDayChange).toLocaleString(undefined, {maximumFractionDigits:0}) + " (" + fmtSign(totalDayPct) + "%)" + benchmarkStr;
+  currentTitleBase = emoji + " " + sign + sym + Math.abs(totalDayChange).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2}) + " (" + fmtSign(totalDayPct) + "%)" + benchmarkStr;
   updateFullTitle();
 }
 
@@ -3214,7 +3219,7 @@ function getColorValue(cell) {
 function renderMapPane(container, items, title) {
   const header = document.createElement('div');
   header.className = 'pane-header';
-  header.innerHTML = `<div class="pane-title">${title}</div><div class="pane-sub">${items.length} holding${items.length === 1 ? '' : 's'}</div>`;
+  header.innerHTML = `<div class="pane-title">${title}</div><div class="pane-sub">${items.length.toLocaleString('en-US')} holding${items.length === 1 ? '' : 's'}</div>`;
   container.appendChild(header);
   const body = document.createElement('div');
   body.className = 'pane-body';
@@ -3279,15 +3284,15 @@ function renderMapPane(container, items, title) {
         let equivPriceStr = '';
         let equivMvStr = '';
         if (isThb) {
-          equivPriceStr = (cell.price !== undefined && usdThbRate > 0) ? ` <span style="color:var(--muted); font-size:10.5px;">(≈ $${(cell.price / usdThbRate).toFixed(2)})</span>` : '';
+          equivPriceStr = (cell.price !== undefined && usdThbRate > 0) ? ` <span style="color:var(--muted); font-size:10.5px;">(≈ $${(cell.price / usdThbRate).toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})})</span>` : '';
           equivMvStr = (cell.marketValue !== null && usdThbRate > 0) ? ` <span style="color:var(--muted); font-size:10.5px;">(≈ $${Math.round(cell.marketValue / usdThbRate).toLocaleString('en-US')})</span>` : '';
         } else {
           equivPriceStr = cell.price !== undefined ? ` <span style="color:var(--muted); font-size:10.5px;">(฿${(cell.price * usdThbRate).toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})})</span>` : '';
           equivMvStr = cell.marketValue !== null ? ` <span style="color:var(--muted); font-size:10.5px;">(฿${Math.round(cell.marketValue * usdThbRate).toLocaleString('en-US')})</span>` : '';
         }
-        document.getElementById('tt-price').innerHTML = (cell.price !== undefined ? sym + cell.price.toFixed(2) : '—') + equivPriceStr;
+        document.getElementById('tt-price').innerHTML = (cell.price !== undefined ? sym + cell.price.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2}) : '—') + equivPriceStr;
         document.getElementById('tt-chgpct').innerHTML = cell.changePct !== undefined ? `<span class="${colorClass(cell.changePct)}">${fmtSign(cell.changePct)}%</span>` : '—';
-        document.getElementById('tt-mv').innerHTML = (cell.marketValue !== null ? sym + cell.marketValue.toLocaleString('en-US',{maximumFractionDigits:0}) : '—') + equivMvStr;
+        document.getElementById('tt-mv').innerHTML = (cell.marketValue !== null ? sym + cell.marketValue.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2}) : '—') + equivMvStr;
         document.getElementById('tt-gp').innerHTML = cell.gainPct !== null ? `<span class="${colorClass(cell.gainPct)}">${fmtSign(cell.gainPct)}%</span>` : '—';
       });
       div.addEventListener('mouseleave', () => {
@@ -3339,8 +3344,8 @@ function renderMap() {
   } else {
     wrapper.style.gridTemplateColumns = '1fr';
   }
-  renderMapPane(gainersContainer, gainers, `Gainers/Cash (${((gainerWeight / (gainerWeight + loserWeight)) * 100 || 0).toFixed(1)}%)`);
-  renderMapPane(losersContainer, losers, `Losers (${((loserWeight / (gainerWeight + loserWeight)) * 100 || 0).toFixed(1)}%)`);
+  renderMapPane(gainersContainer, gainers, `Gainers/Cash (${((gainerWeight / (gainerWeight + loserWeight)) * 100 || 0).toLocaleString('en-US', {minimumFractionDigits: 1, maximumFractionDigits: 1})}%)`);
+  renderMapPane(losersContainer, losers, `Losers (${((loserWeight / (gainerWeight + loserWeight)) * 100 || 0).toLocaleString('en-US', {minimumFractionDigits: 1, maximumFractionDigits: 1})}%)`);
 
   // Update Legend labels
   const labels = document.querySelectorAll('.legend-label');
@@ -3380,7 +3385,8 @@ function refreshPortfolio() {
   renderMap();
 }
 async function reconcileCash() {
-  const currentActual = prompt("Enter your actual current cash balance (e.g. from your broker account):", CASH_BALANCE.toFixed(2));
+  const sym = getCurrencySymbol();
+  const currentActual = prompt(`Enter your actual current cash balance in ${sym} (e.g. from your broker account):`, CASH_BALANCE.toFixed(2));
   if (currentActual === null || currentActual.trim() === "" || isNaN(currentActual)) return;
   
   const target = parseFloat(currentActual);
@@ -3395,7 +3401,7 @@ async function reconcileCash() {
   const amount = Math.abs(diff);
   const date = new Date().toISOString().split('T')[0];
   
-  const confirmed = await showConfirm(`Create a ${action} of $${amount.toLocaleString()} to adjust cash balance to $${target.toLocaleString()}?`);
+  const confirmed = await showConfirm(`Create a ${action} of ${sym}${amount.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})} to adjust cash balance to ${sym}${target.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}?`);
   if (!confirmed) return;
   
   transactions.push({
@@ -3409,7 +3415,7 @@ async function reconcileCash() {
   
   saveTransactions();
   refreshPortfolio();
-  showAlert(`Cash balance updated to $${target.toLocaleString()}`);
+  showAlert(`Cash balance updated to ${sym}${target.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`);
 }
 
 function setTodayDate() {
@@ -3526,11 +3532,11 @@ function updateCalcBase() {
   const isThb = getActiveCurrency() === 'THB';
   const sym = getCurrencySymbol();
   const altTotal = isThb
-    ? `≈ $${(usdThbRate > 0 ? (pos.totalCost / usdThbRate).toFixed(2) : 0)}`
+    ? `≈ $${(usdThbRate > 0 ? (pos.totalCost / usdThbRate).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2}) : '0.00')}`
     : `≈ ฿${Math.round(pos.totalCost * usdThbRate).toLocaleString('en-US')}`;
   
   document.getElementById('calc-base-info').innerHTML = 
-    `Current: <b>${pos.shares.toLocaleString()}</b> shares @ <b>${sym}${pos.avgCost.toFixed(2)}</b> (Total: ${sym}${pos.totalCost.toLocaleString()} <span style="color:var(--muted); font-size:11px;">${altTotal}</span>, Weight: <b>${currentWeight.toFixed(2)}%</b>)`;
+    `Current: <b>${fmtShares(pos.shares)}</b> shares @ <b>${sym}${pos.avgCost.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</b> (Total: ${sym}${pos.totalCost.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})} <span style="color:var(--muted); font-size:11px;">${altTotal}</span>, Weight: <b>${currentWeight.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}%</b>)`;
   
   runAvgCalc();
 }
@@ -3586,9 +3592,9 @@ function runAvgCalc(triggeredBy, rowIdx) {
         const newAvgVal = newTotalCost / newTotalShares;
         const newWeight = (newMv / (totalMv + (qty * currentTickerPrice))) * 100;
 
-        resAvg.textContent = sym + newAvgVal.toFixed(2);
+        resAvg.textContent = sym + newAvgVal.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
         resAvg.style.color = '';
-        resW.textContent = newWeight.toFixed(2) + '%';
+        resW.textContent = newWeight.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2}) + '%';
       } else {
         newTotalShares = baseShares - qty;
         if (newTotalShares < 0) {
@@ -3601,9 +3607,9 @@ function runAvgCalc(triggeredBy, rowIdx) {
         const newTotalMv = totalMv - (qty * currentTickerPrice);
         const newWeight = newTotalMv > 0 ? (newMv / newTotalMv) * 100 : 0;
 
-        resAvg.textContent = sym + baseAvg.toFixed(2);
+        resAvg.textContent = sym + baseAvg.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
         resAvg.style.color = 'var(--muted)';
-        resW.textContent = newWeight.toFixed(2) + '%';
+        resW.textContent = newWeight.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2}) + '%';
       }
     } else {
       resAvg.textContent = resW.textContent = '—';
