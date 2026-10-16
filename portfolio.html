@@ -662,7 +662,9 @@
   }
   .modal-backdrop.active { display: flex; }
   .modal-card {
-    width: min(720px, 95vw);
+    width: min(760px, 95vw);
+    max-height: 90vh;
+    overflow-y: auto;
     background: var(--bg2);
     border: 1px solid var(--border2);
     border-radius: 18px;
@@ -906,17 +908,22 @@
 
   /* Calculator Styles */
   .calc-table-wrap { width: 100%; overflow-x: auto; margin-top: 10px; border: 1px solid var(--border); border-radius: 12px; background: var(--bg3); }
-  .calc-table { width: 100%; border-collapse: collapse; min-width: 540px; table-layout: auto; }
-  .calc-table th { padding: 12px 8px; background: var(--bg3); color: var(--muted); font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 1px solid var(--border); }
-  .calc-table td { padding: 10px 8px; text-align: right; border-bottom: 1px solid var(--border); font-size: 12px; }
+  .calc-table { width: 100%; border-collapse: collapse; min-width: 580px; table-layout: auto; }
+  .calc-table th { padding: 10px 6px; background: var(--bg3); color: var(--muted); font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 1px solid var(--border); white-space: nowrap; }
+  .calc-table td { padding: 7px 6px; text-align: right; border-bottom: 1px solid var(--border); font-size: 12px; }
   .calc-table tr:last-child td { border-bottom: none; }
   .calc-table tr:hover { background: rgba(59,130,246,0.04); }
-  .calc-table th:first-child, .calc-table td:first-child { text-align: left; width: 30%; }
-  .calc-input { width: 100%; padding: 8px 12px; background: var(--bg); color: var(--text); border: 1px solid var(--border2); border-radius: 6px; font-family: inherit; font-size: 13px; transition: border-color 0.2s; }
+  .calc-table th.col-step, .calc-table td.col-step { text-align: center; width: 32px; color: var(--muted); font-size: 11px; font-weight: 600; }
+  .calc-table th.col-action, .calc-table td.col-action { text-align: center; width: 32px; }
+  .calc-input { width: 100%; padding: 7px 9px; background: var(--bg); color: var(--text); border: 1px solid var(--border2); border-radius: 6px; font-family: inherit; font-size: 12px; transition: border-color 0.2s; box-sizing: border-box; }
   .calc-input:focus { border-color: var(--accent); outline: none; }
-  .calc-res-val { font-weight: 700; color: var(--accent); font-family: 'JetBrains Mono', monospace; font-size: 13px; }
+  .calc-res-val { font-weight: 700; color: var(--accent); font-family: 'JetBrains Mono', monospace; font-size: 12px; white-space: nowrap; }
   .calc-res-secondary { color: var(--muted); font-size: 11px; font-weight: 400; }
-  .calc-row-label { font-size: 10px; color: var(--muted); display: block; margin-bottom: 2px; text-transform: uppercase; }
+  .calc-row-label { font-size: 10px; color: var(--muted); display: block; margin-bottom: 2px; text-transform: uppercase; letter-spacing: 0.3px; }
+  .calc-del-btn { background: transparent; border: none; color: var(--muted); font-size: 15px; cursor: pointer; padding: 2px 6px; border-radius: 4px; line-height: 1; transition: all 0.15s; }
+  .calc-del-btn:hover { color: var(--loss); background: var(--loss-dim); }
+  .calc-preset-btn { background: var(--bg); border: 1px solid var(--border2); color: var(--muted); font-size: 11px; padding: 3px 8px; border-radius: 6px; cursor: pointer; font-family: inherit; transition: all 0.15s; }
+  .calc-preset-btn:hover { border-color: var(--accent); color: var(--text); background: rgba(59,130,246,0.08); }
   /* CHART TOOLTIP */
   .chart-tooltip {
     position: fixed;
@@ -2971,7 +2978,7 @@ function renderTable() {
     const gainDStr = r.gainD !== null ? `<span class="${colorClass(r.gainD)}">${r.gainD >= 0?'+':''}${sym}${Math.abs(r.gainD).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})}</span>` : '—';
     const gainPctStr = r.gainPct !== null ? `<span class="${colorClass(r.gainPct)}">${fmtSign(r.gainPct)}%</span>` : '—';
     const dayStr = r.changeD !== null ? `<span class="${colorClass(r.changeD)}">${r.changeD >= 0?'+':''}${sym}${Math.abs(r.changeD).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})}</span>` : '—';
-    return `<tr data-ticker="${r.ticker}" onclick="setTxnFilter('${r.ticker}')" class="${txnFilter === r.ticker ? 'selected-row' : ''}">
+    return `<tr data-ticker="${r.ticker}" onclick="setTxnFilter('${r.ticker}')" ondblclick="openAvgCalculator('${r.ticker}')" class="${txnFilter === r.ticker ? 'selected-row' : ''}">
       <td><div class="ticker-cell"><span class="tick-badge" 
         onmouseenter="showTickerChart('${r.ticker}', event)" 
         onmouseleave="hideTickerChart()">${r.ticker}</span></div></td>
@@ -3454,33 +3461,63 @@ window.addEventListener('resize', () => {
   if (document.getElementById('view-map').style.display !== 'none') renderMap();
 });
 
-function openAvgCalculator() {
+function openAvgCalculator(targetTicker) {
   const tickers = PORTFOLIO.map(p => p.ticker);
   if (!tickers.length) return showAlert("Please add positions to your portfolio first.");
 
+  // Detect selected stock from the main table (table ใหญ่)
+  let selectedTicker = targetTicker;
+  if (!selectedTicker || !tickers.includes(selectedTicker)) {
+    if (txnFilter && tickers.includes(txnFilter)) {
+      selectedTicker = txnFilter;
+    } else {
+      const selectedRow = document.querySelector('#portfolio-tbody tr.selected-row');
+      const rowTicker = selectedRow?.dataset?.ticker;
+      if (rowTicker && tickers.includes(rowTicker)) {
+        selectedTicker = rowTicker;
+      }
+    }
+  }
+  if (!selectedTicker || !tickers.includes(selectedTicker)) {
+    selectedTicker = tickers[0];
+  }
+
   const sym = getCurrencySymbol();
-  let optionsHtml = tickers.map(t => `<option value="${t}">${t}</option>`).join('');
+  let optionsHtml = tickers.map(t => `<option value="${t}" ${t === selectedTicker ? 'selected' : ''}>${t}</option>`).join('');
   
   const content = `
-    <div id="calc-base-info" style="padding:12px; background:rgba(59,130,246,0.05); border: 1px solid rgba(59,130,246,0.2); border-radius:8px; font-size:12px; margin-bottom:15px; color: var(--text);"></div>
+    <div id="calc-base-info" style="padding:12px; background:rgba(59,130,246,0.05); border: 1px solid rgba(59,130,246,0.2); border-radius:8px; font-size:12px; margin-bottom:12px; color: var(--text);"></div>
     
-    <div style="display: flex; gap: 12px; margin-bottom: 15px; flex-wrap: wrap;">
-      <div style="flex: 1; min-width: 140px;">
+    <div style="display: flex; gap: 10px; margin-bottom: 12px; flex-wrap: wrap;">
+      <div style="flex: 1.2; min-width: 130px;">
         <label class="calc-row-label">Simulation Ticker</label>
-        <select id="calc-ticker" class="calc-input" onchange="updateCalcBase()">
+        <select id="calc-ticker" class="calc-input" onchange="updateCalcBase(true)">
           ${optionsHtml}
         </select>
       </div>
-      <div style="flex: 1; min-width: 100px;">
+      <div style="flex: 0.9; min-width: 100px;">
         <label class="calc-row-label">Sim Action</label>
         <select id="calc-action" class="calc-input" onchange="runAvgCalc()">
           <option value="buy">Buy More</option>
           <option value="sell">Sell Off</option>
         </select>
       </div>
-      <div style="flex: 1; min-width: 140px;">
-        <label class="calc-row-label">Sim Price (${sym})</label>
-        <input type="number" id="calc-buy-price" class="calc-input" placeholder="0.00" oninput="runAvgCalc()">
+      <div style="flex: 1.6; min-width: 190px;">
+        <label class="calc-row-label">Sim Mode (จำลองรวมกันไหม)</label>
+        <select id="calc-mode" class="calc-input" onchange="runAvgCalc()">
+          <option value="cumulative">🔗 รวมสะสมทุกไม้ (Cumulative DCA)</option>
+          <option value="independent">⚖️ แยกคำนวณแต่ละราคา (Independent)</option>
+        </select>
+      </div>
+    </div>
+
+    <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; flex-wrap: wrap; gap: 6px;">
+      <div style="font-size: 11px; color: var(--muted); font-weight: 500;">Quick Prices:</div>
+      <div style="display: flex; gap: 6px; flex-wrap: wrap;">
+        <button type="button" class="calc-preset-btn" onclick="quickPreset('current')">Market Price</button>
+        <button type="button" class="calc-preset-btn" onclick="quickPreset('step2')">Step -2%</button>
+        <button type="button" class="calc-preset-btn" onclick="quickPreset('step5')">Step -5%</button>
+        <button type="button" class="calc-preset-btn" onclick="quickPreset('clear')" style="color:var(--loss);">Clear All</button>
       </div>
     </div>
     
@@ -3488,24 +3525,32 @@ function openAvgCalculator() {
     <table class="calc-table">
       <thead>
         <tr>
-          <th>Sim Amount (${sym})</th>
-          <th id="calc-col-qty">Sim Qty</th>
-          <th>New Avg</th>
-          <th>New Wght</th>
+          <th class="col-step">#</th>
+          <th style="min-width: 105px; text-align: left;">Sim Price (${sym})</th>
+          <th style="min-width: 110px; text-align: left;">Sim Amount (${sym})</th>
+          <th style="min-width: 90px; text-align: left;">Sim Qty</th>
+          <th style="min-width: 125px; text-align: right;">New Avg (Diff)</th>
+          <th style="min-width: 75px; text-align: right;">New Wght</th>
+          <th class="col-action"></th>
         </tr>
       </thead>
       <tbody>
         ${Array(6).fill(0).map((_, i) => `
           <tr>
-            <td><input type="number" class="calc-input calc-amt" data-idx="${i}" placeholder="Amount" oninput="runAvgCalc('amt', ${i})"></td>
-            <td><input type="number" class="calc-input calc-qty" data-idx="${i}" placeholder="Qty" oninput="runAvgCalc('qty', ${i})"></td>
+            <td class="col-step">${i + 1}</td>
+            <td><input type="number" step="any" class="calc-input calc-p" id="calc-p-${i}" data-idx="${i}" placeholder="Price" oninput="runAvgCalc('price', ${i})"></td>
+            <td><input type="number" step="any" class="calc-input calc-amt" id="calc-a-${i}" data-idx="${i}" placeholder="Amount" oninput="runAvgCalc('amt', ${i})"></td>
+            <td><input type="number" step="any" class="calc-input calc-qty" id="calc-q-${i}" data-idx="${i}" placeholder="Qty" oninput="runAvgCalc('qty', ${i})"></td>
             <td id="res-avg-${i}" class="calc-res-val">—</td>
             <td id="res-w-${i}" class="calc-res-val">—</td>
+            <td class="col-action"><button type="button" class="calc-del-btn" onclick="clearCalcRow(${i})" title="Clear">×</button></td>
           </tr>
         `).join('')}
       </tbody>
     </table>
     </div>
+
+    <div id="calc-summary-card" style="margin-top: 12px; padding: 12px 14px; background: rgba(59,130,246,0.06); border: 1px solid rgba(59,130,246,0.2); border-radius: 8px;"></div>
   `;
 
   showModal({
@@ -3513,16 +3558,26 @@ function openAvgCalculator() {
     message: content,
     buttons: [{ text: 'Close', onClick: () => {} }]
   });
-  updateCalcBase();
+  updateCalcBase(false);
 }
 
-function updateCalcBase() {
-  const ticker = document.getElementById('calc-ticker').value;
+function updateCalcBase(isTickerChange) {
+  const tickerEl = document.getElementById('calc-ticker');
+  if (!tickerEl) return;
+  const ticker = tickerEl.value;
   const pos = PORTFOLIO.find(p => p.ticker === ticker);
   if (!pos) return;
   
   const currentPrice = priceData[ticker]?.price || 0;
-  document.getElementById('calc-buy-price').value = currentPrice ? currentPrice.toFixed(2) : "";
+  
+  if (isTickerChange) {
+    document.querySelectorAll('.calc-p, .calc-amt, .calc-qty').forEach(inp => inp.value = '');
+  }
+
+  const p0 = document.getElementById('calc-p-0');
+  if (p0 && (!p0.value || isTickerChange)) {
+    p0.value = currentPrice ? currentPrice.toFixed(2) : "";
+  }
   
   const rows = PORTFOLIO.map(getRow);
   const totalMv = rows.reduce((sum, r) => sum + (r.marketValue || 0), 0);
@@ -3535,16 +3590,58 @@ function updateCalcBase() {
     ? `≈ $${(usdThbRate > 0 ? (pos.totalCost / usdThbRate).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2}) : '0.00')}`
     : `≈ ฿${Math.round(pos.totalCost * usdThbRate).toLocaleString('en-US')}`;
   
-  document.getElementById('calc-base-info').innerHTML = 
-    `Current: <b>${fmtShares(pos.shares)}</b> shares @ <b>${sym}${pos.avgCost.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</b> (Total: ${sym}${pos.totalCost.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})} <span style="color:var(--muted); font-size:11px;">${altTotal}</span>, Weight: <b>${currentWeight.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}%</b>)`;
+  const marketPriceStr = currentPrice ? `${sym}${currentPrice.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}` : 'N/A';
+
+  const baseInfoEl = document.getElementById('calc-base-info');
+  if (baseInfoEl) {
+    baseInfoEl.innerHTML = 
+      `Current: <b>${fmtShares(pos.shares)}</b> shares @ <b>${sym}${pos.avgCost.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</b> (Total: ${sym}${pos.totalCost.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})} <span style="color:var(--muted); font-size:11px;">${altTotal}</span>, Weight: <b>${currentWeight.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}%</b>, Mkt Price: <b>${marketPriceStr}</b>)`;
+  }
   
   runAvgCalc();
 }
 
-function runAvgCalc(triggeredBy, rowIdx) {
+function quickPreset(type) {
   const ticker = document.getElementById('calc-ticker').value;
+  const currentPrice = priceData[ticker]?.price || 0;
+  const pInputs = document.querySelectorAll('.calc-p');
+  
+  if (type === 'clear') {
+    document.querySelectorAll('.calc-p, .calc-amt, .calc-qty').forEach(inp => inp.value = '');
+  } else if (currentPrice && currentPrice > 0) {
+    pInputs.forEach((inp, idx) => {
+      let p = currentPrice;
+      if (type === 'step2') p = currentPrice * (1 - (idx * 0.02));
+      if (type === 'step5') p = currentPrice * (1 - (idx * 0.05));
+      inp.value = (p > 0 ? p : 0).toFixed(2);
+      
+      const aInp = document.getElementById(`calc-a-${idx}`);
+      const qInp = document.getElementById(`calc-q-${idx}`);
+      const aVal = parseFloat(aInp?.value);
+      if (!isNaN(aVal) && aVal > 0 && p > 0) {
+        qInp.value = (aVal / p).toFixed(2);
+      }
+    });
+  }
+  runAvgCalc();
+}
+
+function clearCalcRow(idx) {
+  const p = document.getElementById(`calc-p-${idx}`);
+  const a = document.getElementById(`calc-a-${idx}`);
+  const q = document.getElementById(`calc-q-${idx}`);
+  if (p) p.value = '';
+  if (a) a.value = '';
+  if (q) q.value = '';
+  runAvgCalc();
+}
+
+function runAvgCalc(triggeredBy, rowIdx) {
+  const tickerEl = document.getElementById('calc-ticker');
+  if (!tickerEl) return;
+  const ticker = tickerEl.value;
   const action = document.getElementById('calc-action').value;
-  const simPrice = parseFloat(document.getElementById('calc-buy-price').value);
+  const mode = document.getElementById('calc-mode').value;
   const pos = PORTFOLIO.find(p => p.ticker === ticker);
   if (!pos) return;
 
@@ -3555,67 +3652,210 @@ function runAvgCalc(triggeredBy, rowIdx) {
 
   const rows = PORTFOLIO.map(getRow);
   const totalMv = rows.reduce((sum, r) => sum + (r.marketValue || 0), 0);
-  const currentTickerPrice = priceData[ticker]?.price || simPrice;
+  const currentTickerPrice = priceData[ticker]?.price || baseAvg;
 
-  const amts = document.querySelectorAll('.calc-amt');
-  const qtys = document.querySelectorAll('.calc-qty');
+  if (triggeredBy && rowIdx !== undefined) {
+    const pInp = document.getElementById(`calc-p-${rowIdx}`);
+    const aInp = document.getElementById(`calc-a-${rowIdx}`);
+    const qInp = document.getElementById(`calc-q-${rowIdx}`);
+    const simPrice = parseFloat(pInp?.value);
 
-  amts.forEach((amtInp, i) => {
-    const qtyInp = qtys[i];
-    const resAvg = document.getElementById(`res-avg-${i}`);
-    const resW = document.getElementById(`res-w-${i}`);
-    
-    if (triggeredBy && i === rowIdx) {
-      if (triggeredBy === 'amt') {
-        const val = parseFloat(amtInp.value);
-        if (!isNaN(val) && !isNaN(simPrice) && simPrice > 0) {
-          qtyInp.value = (val / simPrice).toFixed(2);
-        } else { qtyInp.value = ''; }
-      } else if (triggeredBy === 'qty') {
-        const val = parseFloat(qtyInp.value);
-        if (!isNaN(val) && !isNaN(simPrice) && simPrice > 0) {
-          amtInp.value = (val * simPrice).toFixed(2);
-        } else { amtInp.value = ''; }
+    if (triggeredBy === 'amt') {
+      const val = parseFloat(aInp.value);
+      if (!isNaN(val) && !isNaN(simPrice) && simPrice > 0) {
+        qInp.value = (val / simPrice).toFixed(2);
+      } else if (isNaN(val)) {
+        qInp.value = '';
       }
-    }
-
-    const amt = parseFloat(amtInp.value);
-    const qty = parseFloat(qtyInp.value);
-
-    if (!isNaN(amt) && !isNaN(qty) && amt > 0 && qty > 0) {
-      let newTotalShares, newTotalCost, newMv;
-
-      if (action === 'buy') {
-        newTotalShares = baseShares + qty;
-        newTotalCost = baseCost + amt;
-        newMv = (baseShares * currentTickerPrice) + (qty * currentTickerPrice);
-        const newAvgVal = newTotalCost / newTotalShares;
-        const newWeight = (newMv / (totalMv + (qty * currentTickerPrice))) * 100;
-
-        resAvg.textContent = sym + newAvgVal.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
-        resAvg.style.color = '';
-        resW.textContent = newWeight.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2}) + '%';
-      } else {
-        newTotalShares = baseShares - qty;
-        if (newTotalShares < 0) {
-          resAvg.textContent = 'Exceeds';
-          resW.textContent = '—';
-          return;
+    } else if (triggeredBy === 'qty') {
+      const val = parseFloat(qInp.value);
+      if (!isNaN(val) && !isNaN(simPrice) && simPrice > 0) {
+        aInp.value = (val * simPrice).toFixed(2);
+      } else if (isNaN(val)) {
+        aInp.value = '';
+      }
+    } else if (triggeredBy === 'price') {
+      const aVal = parseFloat(aInp.value);
+      const qVal = parseFloat(qInp.value);
+      if (!isNaN(simPrice) && simPrice > 0) {
+        if (!isNaN(aVal) && aVal > 0) {
+          qInp.value = (aVal / simPrice).toFixed(2);
+        } else if (!isNaN(qVal) && qVal > 0) {
+          aInp.value = (qVal * simPrice).toFixed(2);
         }
-        
-        newMv = newTotalShares * currentTickerPrice;
-        const newTotalMv = totalMv - (qty * currentTickerPrice);
-        const newWeight = newTotalMv > 0 ? (newMv / newTotalMv) * 100 : 0;
-
-        resAvg.textContent = sym + baseAvg.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
-        resAvg.style.color = 'var(--muted)';
-        resW.textContent = newWeight.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2}) + '%';
       }
-    } else {
-      resAvg.textContent = resW.textContent = '—';
-      resAvg.style.color = '';
     }
-  });
+  }
+
+  const pInputs = document.querySelectorAll('.calc-p');
+  const aInputs = document.querySelectorAll('.calc-amt');
+  const qInputs = document.querySelectorAll('.calc-qty');
+
+  if (mode === 'cumulative') {
+    let cumShares = baseShares;
+    let cumCost = baseCost;
+    let cumTotalMv = totalMv;
+    let totalSimAmt = 0;
+    let totalSimQty = 0;
+    let activeRows = 0;
+    let exceeds = false;
+
+    pInputs.forEach((pInp, i) => {
+      const aInp = aInputs[i];
+      const qInp = qInputs[i];
+      const resAvg = document.getElementById(`res-avg-${i}`);
+      const resW = document.getElementById(`res-w-${i}`);
+      if (!resAvg || !resW) return;
+
+      const pVal = parseFloat(pInp.value);
+      const aVal = parseFloat(aInp.value);
+      const qVal = parseFloat(qInp.value);
+
+      if (!exceeds && !isNaN(pVal) && pVal > 0 && !isNaN(aVal) && !isNaN(qVal) && aVal > 0 && qVal > 0) {
+        activeRows++;
+        if (action === 'buy') {
+          cumShares += qVal;
+          cumCost += aVal;
+          cumTotalMv += (qVal * currentTickerPrice);
+          totalSimAmt += aVal;
+          totalSimQty += qVal;
+
+          const newAvgVal = cumCost / cumShares;
+          const newMv = cumShares * currentTickerPrice;
+          const newWeight = cumTotalMv > 0 ? (newMv / cumTotalMv) * 100 : 0;
+
+          const diffPct = baseAvg > 0 ? ((newAvgVal - baseAvg) / baseAvg) * 100 : 0;
+          const diffSign = diffPct > 0 ? '+' : '';
+          const diffColor = diffPct < 0 ? 'var(--gain)' : (diffPct > 0 ? 'var(--loss)' : 'var(--muted)');
+
+          resAvg.innerHTML = `${sym}${newAvgVal.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})} <span style="font-size:10px; font-weight:normal; color:${diffColor};">(${diffSign}${diffPct.toFixed(1)}%)</span>`;
+          resW.textContent = newWeight.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2}) + '%';
+        } else {
+          // Sell off
+          if (cumShares - qVal < 0) {
+            exceeds = true;
+            resAvg.innerHTML = `<span style="color:var(--loss)">Exceeds</span>`;
+            resW.textContent = '—';
+          } else {
+            cumShares -= qVal;
+            cumTotalMv -= (qVal * currentTickerPrice);
+            totalSimAmt += aVal;
+            totalSimQty += qVal;
+
+            const newMv = cumShares * currentTickerPrice;
+            const newWeight = cumTotalMv > 0 ? (newMv / cumTotalMv) * 100 : 0;
+
+            resAvg.innerHTML = `${sym}${baseAvg.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+            resW.textContent = newWeight.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2}) + '%';
+          }
+        }
+      } else {
+        if (exceeds) {
+          resAvg.innerHTML = `<span style="color:var(--muted)">—</span>`;
+          resW.textContent = '—';
+        } else {
+          resAvg.textContent = '—';
+          resW.textContent = '—';
+        }
+      }
+    });
+
+    const summaryEl = document.getElementById('calc-summary-card');
+    if (summaryEl) {
+      if (activeRows > 0) {
+        const finalAvg = cumShares > 0 ? (cumCost / cumShares) : 0;
+        const finalDiffPct = baseAvg > 0 ? ((finalAvg - baseAvg) / baseAvg) * 100 : 0;
+        const finalDiffSign = finalDiffPct > 0 ? '+' : '';
+        const finalDiffColor = finalDiffPct < 0 ? 'var(--gain)' : (finalDiffPct > 0 ? 'var(--loss)' : 'var(--text)');
+        const finalMv = cumShares * currentTickerPrice;
+        const finalWeight = cumTotalMv > 0 ? (finalMv / cumTotalMv) * 100 : 0;
+
+        summaryEl.innerHTML = `
+          <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px;">
+            <div>
+              <div style="font-size:10px; color:var(--muted); text-transform:uppercase; letter-spacing:0.5px;">Total ${action === 'buy' ? 'Invested' : 'Sold'}</div>
+              <div style="font-size:14px; font-weight:700; color:var(--text);">${sym}${totalSimAmt.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</div>
+            </div>
+            <div>
+              <div style="font-size:10px; color:var(--muted); text-transform:uppercase; letter-spacing:0.5px;">Total Shares ${action === 'buy' ? 'Added' : 'Sold'}</div>
+              <div style="font-size:14px; font-weight:700; color:var(--text);">${action === 'buy' ? '+' : '-'}${fmtShares(totalSimQty)} shs</div>
+            </div>
+            <div>
+              <div style="font-size:10px; color:var(--muted); text-transform:uppercase; letter-spacing:0.5px;">Final Avg Cost</div>
+              <div style="font-size:14px; font-weight:700; color:var(--accent);">${sym}${finalAvg.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})} <span style="font-size:11px; font-weight:normal; color:${finalDiffColor};">(${finalDiffSign}${finalDiffPct.toFixed(1)}%)</span></div>
+            </div>
+            <div>
+              <div style="font-size:10px; color:var(--muted); text-transform:uppercase; letter-spacing:0.5px;">Final Portfolio Weight</div>
+              <div style="font-size:14px; font-weight:700; color:var(--text);">${finalWeight.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}%</div>
+            </div>
+          </div>
+        `;
+      } else {
+        summaryEl.innerHTML = `
+          <div style="font-size:11px; color:var(--muted); display:flex; align-items:center; gap:6px;">
+            <span>🔗 <b>โหมดสะสมรวมกัน (Cumulative DCA):</b> คำนวณทบยอดสะสมตามลำดับไม้ (ไม้ 1 ➔ ไม้ 2 ➔ ไม้ 3) เพื่อดูต้นทุนและงบรวม</span>
+          </div>
+        `;
+      }
+    }
+  } else {
+    // Mode is independent
+    pInputs.forEach((pInp, i) => {
+      const aInp = aInputs[i];
+      const qInp = qInputs[i];
+      const resAvg = document.getElementById(`res-avg-${i}`);
+      const resW = document.getElementById(`res-w-${i}`);
+      if (!resAvg || !resW) return;
+
+      const pVal = parseFloat(pInp.value);
+      const aVal = parseFloat(aInp.value);
+      const qVal = parseFloat(qInp.value);
+
+      if (!isNaN(pVal) && pVal > 0 && !isNaN(aVal) && !isNaN(qVal) && aVal > 0 && qVal > 0) {
+        if (action === 'buy') {
+          const newShares = baseShares + qVal;
+          const newCost = baseCost + aVal;
+          const newAvgVal = newCost / newShares;
+          const newMv = newShares * currentTickerPrice;
+          const newTotalMv = totalMv + (qVal * currentTickerPrice);
+          const newWeight = newTotalMv > 0 ? (newMv / newTotalMv) * 100 : 0;
+
+          const diffPct = baseAvg > 0 ? ((newAvgVal - baseAvg) / baseAvg) * 100 : 0;
+          const diffSign = diffPct > 0 ? '+' : '';
+          const diffColor = diffPct < 0 ? 'var(--gain)' : (diffPct > 0 ? 'var(--loss)' : 'var(--muted)');
+
+          resAvg.innerHTML = `${sym}${newAvgVal.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})} <span style="font-size:10px; font-weight:normal; color:${diffColor};">(${diffSign}${diffPct.toFixed(1)}%)</span>`;
+          resW.textContent = newWeight.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2}) + '%';
+        } else {
+          // Sell off
+          const newShares = baseShares - qVal;
+          if (newShares < 0) {
+            resAvg.innerHTML = `<span style="color:var(--loss)">Exceeds</span>`;
+            resW.textContent = '—';
+          } else {
+            const newMv = newShares * currentTickerPrice;
+            const newTotalMv = totalMv - (qVal * currentTickerPrice);
+            const newWeight = newTotalMv > 0 ? (newMv / newTotalMv) * 100 : 0;
+
+            resAvg.innerHTML = `${sym}${baseAvg.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+            resW.textContent = newWeight.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2}) + '%';
+          }
+        }
+      } else {
+        resAvg.textContent = '—';
+        resW.textContent = '—';
+      }
+    });
+
+    const summaryEl = document.getElementById('calc-summary-card');
+    if (summaryEl) {
+      summaryEl.innerHTML = `
+        <div style="font-size:11px; color:var(--muted); display:flex; align-items:center; gap:6px;">
+          <span>⚖️ <b>โหมดแยกคำนวณ (Independent):</b> แต่ละแถวคำนวณเทียบกับพอร์ตปัจจุบันตรงๆ เพื่อเปรียบเทียบผลลัพธ์ของแต่ละราคาแยกกัน</span>
+        </div>
+      `;
+    }
+  }
 }
 </script>
 </body>
