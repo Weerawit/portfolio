@@ -2851,22 +2851,33 @@ async function fetchPricesFinnhub(tickers) {
   try {
     fetchExchangeRate(); // Refresh USD/THB live rate in parallel
     
-    // Fetch TradingView America scanner metrics & Finnhub in parallel
-    const [tvMap, ...results] = await Promise.all([
+    // Fetch TradingView America scanner metrics & Finnhub in parallel with Promise.allSettled
+    const [tvRes, ...results] = await Promise.allSettled([
       fetchAmericaScannerMetrics(finnhubTickers),
       ...finnhubTickers.map(t => fetchTickerPrice(t))
     ]);
+
+    const tvMap = (tvRes && tvRes.status === 'fulfilled' && tvRes.value) ? tvRes.value : {};
+
     let successCount = 0;
     results.forEach((res, idx) => {
       const ticker = finnhubTickers[idx];
+      const cleanTicker = (ticker || '').trim().toUpperCase();
+      const tv = tvMap ? (tvMap[cleanTicker] || tvMap[ticker]) : null;
+
       if (res.status === 'fulfilled' && res.value) {
-        const val = { ...res.value };
-        const tv = tvMap ? tvMap[ticker] : null;
+        const val = { ...(priceData[ticker] || {}), ...res.value };
         if (tv) {
-          if (tv.perfW !== null && val.weekChangePct === null) val.weekChangePct = tv.perfW;
-          if (tv.perf1M !== null) val.monthChangePct = tv.perf1M;
-          if (tv.pe !== null && !val.pe) val.pe = tv.pe;
-          if (tv.high52w !== null && !val.high52w) {
+          if (tv.perfW !== null && tv.perfW !== undefined && (val.weekChangePct === null || val.weekChangePct === undefined)) {
+            val.weekChangePct = tv.perfW;
+          }
+          if (tv.perf1M !== null && tv.perf1M !== undefined) {
+            val.monthChangePct = tv.perf1M;
+          }
+          if (tv.pe !== null && tv.pe !== undefined && !val.pe) {
+            val.pe = tv.pe;
+          }
+          if (tv.high52w !== null && tv.high52w !== undefined && !val.high52w) {
             val.high52w = tv.high52w;
           }
         }
@@ -2875,6 +2886,19 @@ async function fetchPricesFinnhub(tickers) {
         }
         priceData[ticker] = val;
         successCount++;
+      } else if (res.status === 'rejected') {
+        console.warn(`Price fetch failed for ${ticker}:`, res.reason);
+        // Fallback: If Finnhub quote failed but TradingView has scanner data, populate it
+        if (tv) {
+          if (!priceData[ticker]) priceData[ticker] = {};
+          if (tv.perfW !== null && tv.perfW !== undefined) priceData[ticker].weekChangePct = tv.perfW;
+          if (tv.perf1M !== null && tv.perf1M !== undefined) priceData[ticker].monthChangePct = tv.perf1M;
+          if (tv.pe !== null && tv.pe !== undefined) priceData[ticker].pe = tv.pe;
+          if (tv.high52w !== null && tv.high52w !== undefined) priceData[ticker].high52w = tv.high52w;
+          if (typeof priceData[ticker].price === 'number' && typeof tv.high52w === 'number' && tv.high52w > 0) {
+            priceData[ticker].drawdown52w = ((priceData[ticker].price - tv.high52w) / tv.high52w) * 100;
+          }
+        }
       }
     });
 
@@ -2906,7 +2930,7 @@ async function fetchPricesFinnhub(tickers) {
 
 // TradingView America scanner for quick 1W, 1M, PE, 52W High
 async function fetchAmericaScannerMetrics(tickers) {
-  const valid = (tickers || []).filter(t => t && t !== 'CASH' && t !== 'SPX');
+  const valid = (tickers || []).map(t => (t || '').trim().toUpperCase()).filter(t => t && t !== 'CASH' && t !== 'SPX');
   if (!valid.length) return {};
   try {
     const payload = {
@@ -2925,7 +2949,7 @@ async function fetchAmericaScannerMetrics(tickers) {
       if (json && Array.isArray(json.data)) {
         json.data.forEach(item => {
           const d = item.d || [];
-          const name = d[0];
+          const name = ((d[0] || '').toUpperCase()) || (item.s ? item.s.split(':').pop().toUpperCase() : '');
           if (name) {
             map[name] = {
               perfW: typeof d[3] === 'number' ? d[3] : null,
@@ -2953,7 +2977,9 @@ function getCachedFundamentals(ticker) {
     const cache = JSON.parse(raw);
     const item = cache[ticker];
     if (item && item.timestamp && (Date.now() - item.timestamp < 12 * 3600 * 1000)) {
-      return item.data;
+      if (item.data && (item.data.forwardPe !== null || item.data.pe !== null || item.data.weekChangePct !== null || item.data.high52w !== null || item.data.earningsSurprise !== null)) {
+        return item.data;
+      }
     }
     return null;
   } catch (e) {
@@ -3070,7 +3096,7 @@ async function fetchTickerPrice(ticker) {
           const mJson = await metricRes.json();
           const m = mJson?.metric || {};
           forwardPe = typeof m.forwardPE === 'number' ? m.forwardPE : null;
-          pe = typeof m.peTTM === 'number' ? m.peTTM : null;
+          pe = typeof m.peTTM === 'number' ? m.peTTM : (typeof m.peBasicExclExtraTTM === 'number' ? m.peBasicExclExtraTTM : (typeof m.peNormalizedAnnual === 'number' ? m.peNormalizedAnnual : null));
           weekChangePct = typeof m['5DayPriceReturnDaily'] === 'number' ? m['5DayPriceReturnDaily'] : null;
           high52w = typeof m['52WeekHigh'] === 'number' ? m['52WeekHigh'] : null;
         }
@@ -3083,15 +3109,22 @@ async function fetchTickerPrice(ticker) {
         const earnRes = await fetch(earnUrl);
         if (earnRes.ok) {
           const eJson = await earnRes.json();
-          if (Array.isArray(eJson) && eJson.length > 0 && typeof eJson[0].surprisePercent === 'number') {
-            earningsSurprise = eJson[0].surprisePercent;
+          if (Array.isArray(eJson) && eJson.length > 0) {
+            const latest = eJson[0];
+            if (typeof latest.surprisePercent === 'number') {
+              earningsSurprise = latest.surprisePercent;
+            } else if (typeof latest.actual === 'number' && typeof latest.estimate === 'number' && latest.estimate !== 0) {
+              earningsSurprise = ((latest.actual - latest.estimate) / Math.abs(latest.estimate)) * 100;
+            }
           }
         }
       } catch (err) {
         console.warn(`Earnings fetch failed for ${ticker}`, err);
       }
 
-      setCachedFundamentals(ticker, { forwardPe, pe, weekChangePct, high52w, earningsSurprise });
+      if (forwardPe !== null || pe !== null || weekChangePct !== null || high52w !== null || earningsSurprise !== null) {
+        setCachedFundamentals(ticker, { forwardPe, pe, weekChangePct, high52w, earningsSurprise });
+      }
     }
   }
 
@@ -3662,6 +3695,12 @@ function renderMap() {
       value: CASH_BALANCE,
       changePct: 0,
       gainPct: 0,
+      weekChangePct: 0,
+      monthChangePct: 0,
+      pe: null,
+      forwardPe: null,
+      earningsSurprise: null,
+      drawdown52w: 0,
       price: 1,
       isCash: true
     });
