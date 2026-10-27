@@ -28,13 +28,21 @@ export default {
 
     // 3. ป้องกันการเรียก path อื่นที่ไม่ใช่ API
     if (!url.pathname.startsWith("/api/")) {
-      return new Response(JSON.stringify({ error: "Invalid path. Use /api/v1/..." }), {
+      return new Response(JSON.stringify({ error: "Invalid path. Use /api/v1/... or /api/yahoo/..." }), {
         status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" }
       });
     }
 
-    const targetUrl = `https://finnhub.io${url.pathname}${url.search}`;
+    let targetUrl = '';
+    let isYahoo = false;
+    if (url.pathname.startsWith("/api/yahoo/")) {
+      isYahoo = true;
+      const yPath = url.pathname.replace(/^\/api\/yahoo/, '');
+      targetUrl = `https://query1.finance.yahoo.com${yPath}${url.search}`;
+    } else {
+      targetUrl = `https://finnhub.io${url.pathname}${url.search}`;
+    }
 
     // 4. ตรวจสอบ Cache ก่อน (ถ้ามี)
     let cache = null;
@@ -73,7 +81,7 @@ export default {
 
     // 6. ถ้าสำเร็จ ให้บันทึกลง Cache (Quotes 60s, Profiles 24 ชั่วโมง)
     if (response.status === 200 && cache) {
-      const ttl = url.pathname.includes("profile") ? 86400 : 60;
+      const ttl = isYahoo ? 3600 : (url.pathname.includes("profile") ? 86400 : (url.pathname.includes("metric") ? 43200 : 60));
       const responseToCache = new Response(response.body, response);
       responseToCache.headers.set("Cache-Control", `public, max-age=${ttl}`);
       responseToCache.headers.set("Access-Control-Allow-Origin", "*");

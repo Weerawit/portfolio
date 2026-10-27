@@ -1102,7 +1102,7 @@
     </div>
     <span class="refresh-dot" id="refresh-dot"></span>
     <button class="btn" onclick="openAvgCalculator()" style="border-color: var(--accent); color: var(--accent);">∑ Avg Calc</button>
-    <button class="btn" onclick="fetchPrices()">↻ Refresh</button>
+    <button class="btn" onclick="fetchPrices(true)">↻ Refresh</button>
   </div>
 </header>
 
@@ -1433,6 +1433,122 @@ function promptEditPrice(ticker, currentPrice) {
   }
 }
 
+// Base historical earnings day performance (% price move on earnings reaction date)
+const BASE_EARNINGS_DAY_MOVE = {
+  AAPL: { move: -7.35, date: '2026-07-31' },
+  NVDA: { move: 8.74, date: '2026-08-27' },
+  MSFT: { move: 15.51, date: '2026-07-30' },
+  GOOGL: { move: -7.13, date: '2026-07-23' },
+  GOOG: { move: -7.13, date: '2026-07-23' },
+  AMZN: { move: 15.32, date: '2026-07-31' },
+  META: { move: -7.95, date: '2026-07-30' },
+  TSLA: { move: -14.52, date: '2026-07-23' },
+  NVO: { move: 0.56, date: '2026-08-05' },
+  LLY: { move: -0.52, date: '2026-08-07' },
+  AVGO: { move: 2.98, date: '2026-09-08' },
+  AMD: { move: -5.51, date: '2026-07-29' },
+  NFLX: { move: -7.26, date: '2026-07-17' },
+  INTC: { move: -1.02, date: '2026-07-31' },
+  QCOM: { move: -2.62, date: '2026-07-30' },
+  TSM: { move: -2.77, date: '2026-07-17' },
+  ASML: { move: -2.09, date: '2026-07-17' },
+  BABA: { move: 2.76, date: '2026-08-18' },
+  JPM: { move: -0.58, date: '2026-07-13' },
+  UNH: { move: 0.64, date: '2026-07-17' },
+  COST: { move: -2.45, date: '2026-08-20' },
+  WMT: { move: -0.25, date: '2026-08-13' },
+  PLTR: { move: 2.10, date: '2026-08-03' },
+  CRM: { move: -0.05, date: '2026-08-24' },
+  ORCL: { move: 3.13, date: '2026-09-02' },
+  ADBE: { move: -3.47, date: '2026-09-08' },
+  PYPL: { move: -0.76, date: '2026-07-31' },
+  DIS: { move: 2.03, date: '2026-08-03' },
+  BA: { move: 0.14, date: '2026-07-24' },
+  ARM: { move: -0.77, date: '2026-07-31' },
+  SMCI: { move: 0.85, date: '2026-08-03' },
+  PANW: { move: -2.21, date: '2026-08-17' },
+  CRWD: { move: -0.66, date: '2026-08-24' }
+};
+
+// Thai DR mappings to underlying symbols for earnings & fundamental inheritance
+const DR_UNDERLYING_MAP = {
+  'AAPL80X': 'AAPL', 'AAPL80': 'AAPL',
+  'NVDA80X': 'NVDA', 'NVDA80': 'NVDA',
+  'MSFT80X': 'MSFT', 'MSFT80': 'MSFT',
+  'GOOG80X': 'GOOGL', 'GOOGL80X': 'GOOGL',
+  'AMZN80X': 'AMZN', 'AMZN80': 'AMZN',
+  'META80X': 'META', 'META80': 'META',
+  'TSLA80X': 'TSLA', 'TSLA80': 'TSLA',
+  'NFLX80X': 'NFLX', 'NFLX80': 'NFLX',
+  'NDX01': 'QQQ', 'SPX01': 'SPY',
+  'BABA80': 'BABA', 'BABA80X': 'BABA'
+};
+
+const EARNINGS_DAY_CACHE_KEY = 'portfolio_earnings_day_cache_v2';
+
+function getEarningsDayMove(ticker) {
+  if (!ticker || ticker === 'CASH') return null;
+  const clean = ticker.trim().toUpperCase().replace(/^SET:/, '');
+  
+  // 1. Check runtime / local storage cache
+  try {
+    const raw = localStorage.getItem(EARNINGS_DAY_CACHE_KEY);
+    if (raw) {
+      const cache = JSON.parse(raw);
+      if (cache[clean] && typeof cache[clean].move === 'number') {
+        return cache[clean];
+      }
+    }
+  } catch (e) {}
+
+  // 2. Check BASE_EARNINGS_DAY_MOVE
+  if (BASE_EARNINGS_DAY_MOVE[clean]) {
+    return BASE_EARNINGS_DAY_MOVE[clean];
+  }
+
+  // 3. Check underlying DR mapping
+  const mapped = DR_UNDERLYING_MAP[clean];
+  if (mapped && BASE_EARNINGS_DAY_MOVE[mapped]) {
+    return BASE_EARNINGS_DAY_MOVE[mapped];
+  }
+
+  return null;
+}
+
+function setEarningsDayMove(ticker, moveVal, earnDate = null) {
+  if (!ticker || ticker === 'CASH') return;
+  const clean = ticker.trim().toUpperCase().replace(/^SET:/, '');
+  try {
+    const raw = localStorage.getItem(EARNINGS_DAY_CACHE_KEY);
+    const cache = raw ? JSON.parse(raw) : {};
+    const existing = cache[clean] || {};
+    cache[clean] = {
+      move: parseFloat(Number(moveVal).toFixed(2)),
+      date: earnDate || existing.date || new Date().toISOString().slice(0, 10),
+      timestamp: Date.now()
+    };
+    localStorage.setItem(EARNINGS_DAY_CACHE_KEY, JSON.stringify(cache));
+  } catch (e) {}
+}
+
+function promptEditEarningsMove(ticker) {
+  const current = getEarningsDayMove(ticker);
+  const currentValStr = (current && typeof current.move === 'number') ? current.move.toString() : '';
+  const input = prompt(`Enter Earnings Reaction Day Move (%) for ${ticker}:\n(e.g. 5.5 for +5.5%, -4.2 for -4.2%)`, currentValStr);
+  if (input !== null && input.trim() !== '') {
+    const val = parseFloat(input);
+    if (!isNaN(val)) {
+      setEarningsDayMove(ticker, val, current?.date);
+      if (!priceData[ticker]) priceData[ticker] = {};
+      priceData[ticker].earningsDayPerf = val;
+      savePriceCache();
+      renderTable();
+      renderMap();
+      showAlert(`Updated Earnings Day Move for ${ticker} to ${val >= 0 ? '+' : ''}${val}%`);
+    }
+  }
+}
+
 // FX Conversion State
 const FX_STORAGE_KEY = 'portfolio_usd_thb_rate_v1';
 let usdThbRate = 32.86;
@@ -1441,8 +1557,14 @@ let lastFxUpdated = null;
 let currentPopAmount = 0;
 let currentPopLabel = '';
 
-async function fetchExchangeRate() {
+async function fetchExchangeRate(force = false) {
   const fxDot = document.getElementById('fx-hdr-dot');
+
+  // Performance optimization: check cached exchange rate (< 30 minutes)
+  if (!force && !isCustomRate && lastFxUpdated && (Date.now() - lastFxUpdated.getTime() < 30 * 60 * 1000)) {
+    return;
+  }
+
   if (fxDot) fxDot.classList.add('updating');
   try {
     const res = await fetch('https://open.er-api.com/v6/latest/USD');
@@ -2711,13 +2833,30 @@ function handleImportFile(event) {
   event.target.value = '';
 }
 
-async function fetchPrices() {
-  const dot = document.getElementById('refresh-dot');
-  const dot2 = document.getElementById('refresh-dot2');
-  dot.classList.add('spinning');
-  dot2.classList.add('spinning');
+let isFetchingPrices = false;
+
+async function fetchPrices(force = false) {
+  if (isFetchingPrices) return;
 
   const isThb = getActiveCurrency() === 'THB';
+  const tickers = [...new Set(PORTFOLIO.map(p => p.ticker).filter(Boolean))];
+
+  // Performance optimization: if not forced and last update was < 30 seconds ago, reuse cached prices
+  const now = Date.now();
+  if (!force && lastPriceCacheTime && (now - lastPriceCacheTime.getTime() < 30000) && Object.keys(priceData).length > 0) {
+    document.getElementById('last-updated-text').textContent = `Using cached prices (${lastPriceCacheTime.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}) · Click ↻ Refresh to force update`;
+    renderTable();
+    renderTransactions();
+    renderMap();
+    updateSummary();
+    return;
+  }
+
+  isFetchingPrices = true;
+  const dot = document.getElementById('refresh-dot');
+  const dot2 = document.getElementById('refresh-dot2');
+  if (dot) dot.classList.add('spinning');
+  if (dot2) dot2.classList.add('spinning');
 
   if (lastPriceCacheTime && Object.keys(priceData).length > 0) {
     document.getElementById('last-updated-text').textContent = `Updating prices… (cached: ${lastPriceCacheTime.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})})`;
@@ -2725,19 +2864,23 @@ async function fetchPrices() {
     document.getElementById('last-updated-text').textContent = isThb ? 'Fetching prices from TradingView…' : 'Fetching prices from Finnhub…';
   }
 
-  const tickers = [...new Set(PORTFOLIO.map(p => p.ticker).filter(Boolean))];
-
-  if (isThb) {
-    await fetchPricesTradingView(tickers);
-  } else {
-    await fetchPricesFinnhub(tickers);
+  try {
+    if (isThb) {
+      await fetchPricesTradingView(tickers, force);
+    } else {
+      await fetchPricesFinnhub(tickers, force);
+    }
+  } finally {
+    isFetchingPrices = false;
+    if (dot) dot.classList.remove('spinning');
+    if (dot2) dot2.classList.remove('spinning');
   }
 }
 
-async function fetchPricesTradingView(tickers) {
+async function fetchPricesTradingView(tickers, force = false) {
   const dot = document.getElementById('refresh-dot');
   const dot2 = document.getElementById('refresh-dot2');
-  fetchExchangeRate(); // Refresh USD/THB live rate in parallel
+  fetchExchangeRate(force); // Refresh USD/THB live rate in parallel (cached)
 
   const validTickers = tickers.filter(t => t && t !== 'CASH');
   const tvTickers = validTickers.map(t => t.includes(':') ? t : `SET:${t}`);
@@ -2784,6 +2927,7 @@ async function fetchPricesTradingView(tickers) {
             }
           } else if (rawTicker) {
             if (close !== undefined && close !== null) {
+              const earnMove = getEarningsDayMove(rawTicker);
               priceData[rawTicker] = {
                 price: close,
                 changePct: typeof changePct === 'number' ? changePct : 0,
@@ -2793,6 +2937,8 @@ async function fetchPricesTradingView(tickers) {
                 pe: typeof pe === 'number' ? pe : null,
                 forwardPe: null,
                 earningsSurprise: null,
+                earningsDayPerf: earnMove ? earnMove.move : null,
+                lastEarnDate: earnMove ? earnMove.date : null,
                 high52w: typeof high52w === 'number' ? high52w : null,
                 drawdown52w: drawdown52w,
                 name: desc || rawTicker,
@@ -2811,8 +2957,8 @@ async function fetchPricesTradingView(tickers) {
     console.warn('TradingView scanner request failed:', tvErr);
   }
 
-  dot.classList.remove('spinning');
-  dot2.classList.remove('spinning');
+  if (dot) dot.classList.remove('spinning');
+  if (dot2) dot2.classList.remove('spinning');
 
   const totalHoldings = validTickers.length;
   if (successCount > 0 || totalHoldings === 0) {
@@ -2830,7 +2976,7 @@ async function fetchPricesTradingView(tickers) {
   updateSummary();
 }
 
-async function fetchPricesFinnhub(tickers) {
+async function fetchPricesFinnhub(tickers, force = false) {
   const dot = document.getElementById('refresh-dot');
   const dot2 = document.getElementById('refresh-dot2');
 
@@ -2838,25 +2984,25 @@ async function fetchPricesFinnhub(tickers) {
   if (!finnhubTickers.includes('SPX')) finnhubTickers.push('SPX');
 
   if (!finnhubTickers.length) {
-    dot.classList.remove('spinning');
-    dot2.classList.remove('spinning');
+    if (dot) dot.classList.remove('spinning');
+    if (dot2) dot2.classList.remove('spinning');
     document.getElementById('last-updated-text').textContent = 'No holdings to price.';
     return;
   }
 
   if (!FINNHUB_API_KEY || FINNHUB_API_KEY === 'YOUR_FINNHUB_API_KEY') {
-    dot.classList.remove('spinning');
-    dot2.classList.remove('spinning');
+    if (dot) dot.classList.remove('spinning');
+    if (dot2) dot2.classList.remove('spinning');
     document.getElementById('last-updated-text').textContent = 'Finnhub API key is missing. Set FINNHUB_API_KEY in the script.';
     return;
   }
 
   try {
-    fetchExchangeRate(); // Refresh USD/THB live rate in parallel
+    fetchExchangeRate(force); // Refresh USD/THB live rate in parallel (cached)
     
     // Fetch TradingView America scanner metrics & Finnhub in parallel with Promise.allSettled
     const [tvRes, ...results] = await Promise.allSettled([
-      fetchAmericaScannerMetrics(finnhubTickers),
+      fetchAmericaScannerMetrics(finnhubTickers, force),
       ...finnhubTickers.map(t => fetchTickerPrice(t))
     ]);
 
@@ -2886,12 +3032,18 @@ async function fetchPricesFinnhub(tickers) {
           if (tv.lastEarnDate) val.lastEarnDate = tv.lastEarnDate;
           if (tv.nextEarnDate) val.nextEarnDate = tv.nextEarnDate;
           if (tv.daysToNextEarn !== null) val.daysToNextEarn = tv.daysToNextEarn;
-          if (val.earningsDayPerf === null || val.earningsDayPerf === undefined) {
-            if (tv.isRecentEarn && typeof val.changePct === 'number') {
-              val.earningsDayPerf = val.changePct;
-            }
-          }
         }
+
+        // Resolve Earnings Day Move: Check cache / baseline first, or recent move if reported today
+        const earnMove = getEarningsDayMove(ticker);
+        if (earnMove) {
+          val.earningsDayPerf = earnMove.move;
+          if (earnMove.date && !val.lastEarnDate) val.lastEarnDate = earnMove.date;
+        } else if (tv && tv.isRecentEarn && typeof val.changePct === 'number') {
+          val.earningsDayPerf = val.changePct;
+          setEarningsDayMove(ticker, val.changePct, tv.lastEarnDate);
+        }
+
         if (typeof val.price === 'number' && typeof val.high52w === 'number' && val.high52w > 0) {
           val.drawdown52w = ((val.price - val.high52w) / val.high52w) * 100;
         }
@@ -2906,15 +3058,24 @@ async function fetchPricesFinnhub(tickers) {
           if (tv.perf1M !== null && tv.perf1M !== undefined) priceData[ticker].monthChangePct = tv.perf1M;
           if (tv.pe !== null && tv.pe !== undefined) priceData[ticker].pe = tv.pe;
           if (tv.high52w !== null && tv.high52w !== undefined) priceData[ticker].high52w = tv.high52w;
+          if (tv.lastEarnDate) priceData[ticker].lastEarnDate = tv.lastEarnDate;
+          if (tv.nextEarnDate) priceData[ticker].nextEarnDate = tv.nextEarnDate;
+          if (tv.daysToNextEarn !== null) priceData[ticker].daysToNextEarn = tv.daysToNextEarn;
           if (typeof priceData[ticker].price === 'number' && typeof tv.high52w === 'number' && tv.high52w > 0) {
             priceData[ticker].drawdown52w = ((priceData[ticker].price - tv.high52w) / tv.high52w) * 100;
           }
         }
+        const fallbackEarnMove = getEarningsDayMove(ticker);
+        if (fallbackEarnMove) {
+          if (!priceData[ticker]) priceData[ticker] = {};
+          priceData[ticker].earningsDayPerf = fallbackEarnMove.move;
+          if (fallbackEarnMove.date && !priceData[ticker].lastEarnDate) priceData[ticker].lastEarnDate = fallbackEarnMove.date;
+        }
       }
     });
 
-    dot.classList.remove('spinning');
-    dot2.classList.remove('spinning');
+    if (dot) dot.classList.remove('spinning');
+    if (dot2) dot2.classList.remove('spinning');
     if (successCount > 0) {
       savePriceCache();
       document.getElementById('last-updated-text').textContent = `Last updated: ${new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})} · Prices via Finnhub (${successCount.toLocaleString('en-US')}/${finnhubTickers.length.toLocaleString('en-US')})`;
@@ -2928,8 +3089,8 @@ async function fetchPricesFinnhub(tickers) {
     renderMap();
     updateSummary();
   } catch (e) {
-    dot.classList.remove('spinning');
-    dot2.classList.remove('spinning');
+    if (dot) dot.classList.remove('spinning');
+    if (dot2) dot2.classList.remove('spinning');
     if (Object.keys(priceData).length > 0) {
       document.getElementById('last-updated-text').textContent = `Using cached prices (${lastPriceCacheTime ? lastPriceCacheTime.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : 'saved'})`;
     } else {
@@ -2939,10 +3100,29 @@ async function fetchPricesFinnhub(tickers) {
   }
 }
 
-// TradingView America scanner for quick 1W, 1M, PE, 52W High
-async function fetchAmericaScannerMetrics(tickers) {
+// TradingView America scanner for quick 1W, 1M, PE, 52W High with 15-minute caching
+const TV_SCANNER_CACHE_KEY = 'portfolio_tv_scanner_cache_v2';
+
+async function fetchAmericaScannerMetrics(tickers, force = false) {
   const valid = (tickers || []).map(t => (t || '').trim().toUpperCase()).filter(t => t && t !== 'CASH' && t !== 'SPX');
   if (!valid.length) return {};
+
+  // Check cache first (TTL: 15 minutes)
+  if (!force) {
+    try {
+      const raw = localStorage.getItem(TV_SCANNER_CACHE_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (parsed && parsed.timestamp && (Date.now() - parsed.timestamp < 15 * 60 * 1000) && parsed.data) {
+          const allFound = valid.every(t => parsed.data[t] !== undefined);
+          if (allFound) {
+            return parsed.data;
+          }
+        }
+      }
+    } catch (e) {}
+  }
+
   try {
     const payload = {
       symbols: { query: { types: [] }, tickers: [] },
@@ -2988,6 +3168,12 @@ async function fetchAmericaScannerMetrics(tickers) {
           }
         });
       }
+      try {
+        localStorage.setItem(TV_SCANNER_CACHE_KEY, JSON.stringify({
+          timestamp: Date.now(),
+          data: map
+        }));
+      } catch (e) {}
       return map;
     }
   } catch (err) {
@@ -2997,15 +3183,18 @@ async function fetchAmericaScannerMetrics(tickers) {
 }
 
 // Local cache for company fundamentals (P/E, Forward P/E, Earnings Surprise)
-const FUNDAMENTALS_CACHE_KEY = 'portfolio_fundamentals_cache_v1';
+// TTL: 24 hours for successful data, 2 hours for null/empty to avoid hammering APIs
+const FUNDAMENTALS_CACHE_KEY = 'portfolio_fundamentals_cache_v2';
 function getCachedFundamentals(ticker) {
   try {
     const raw = localStorage.getItem(FUNDAMENTALS_CACHE_KEY);
     if (!raw) return null;
     const cache = JSON.parse(raw);
     const item = cache[ticker];
-    if (item && item.timestamp && (Date.now() - item.timestamp < 12 * 3600 * 1000)) {
-      if (item.data && (item.data.forwardPe !== null || item.data.pe !== null || item.data.weekChangePct !== null || item.data.high52w !== null || item.data.earningsSurprise !== null)) {
+    if (item && item.timestamp) {
+      const hasData = item.data && (item.data.forwardPe !== null || item.data.earningsSurprise !== null || item.data.pe !== null);
+      const ttl = hasData ? 24 * 3600 * 1000 : 2 * 3600 * 1000;
+      if (Date.now() - item.timestamp < ttl) {
         return item.data;
       }
     }
@@ -3019,7 +3208,7 @@ function setCachedFundamentals(ticker, data) {
   try {
     const raw = localStorage.getItem(FUNDAMENTALS_CACHE_KEY);
     const cache = raw ? JSON.parse(raw) : {};
-    cache[ticker] = { timestamp: Date.now(), data };
+    cache[ticker] = { timestamp: Date.now(), data: data || {} };
     localStorage.setItem(FUNDAMENTALS_CACHE_KEY, JSON.stringify(cache));
   } catch (e) {}
 }
@@ -3152,6 +3341,8 @@ async function fetchTickerPrice(ticker) {
 
       if (forwardPe !== null || pe !== null || weekChangePct !== null || high52w !== null || earningsSurprise !== null) {
         setCachedFundamentals(ticker, { forwardPe, pe, weekChangePct, high52w, earningsSurprise });
+      } else {
+        setCachedFundamentals(ticker, { forwardPe: null, pe: null, weekChangePct: null, high52w: null, earningsSurprise: null });
       }
     }
   }
@@ -3194,8 +3385,15 @@ function getRow(p) {
   const pe = pd?.pe !== undefined ? pd.pe : null;
   const forwardPe = pd?.forwardPe !== undefined ? pd.forwardPe : null;
   const earningsSurprise = pd?.earningsSurprise !== undefined ? pd.earningsSurprise : null;
-  const earningsDayPerf = pd?.earningsDayPerf !== undefined ? pd.earningsDayPerf : null;
-  const lastEarnDate = pd?.lastEarnDate || null;
+  let earningsDayPerf = pd?.earningsDayPerf !== undefined ? pd.earningsDayPerf : null;
+  let lastEarnDate = pd?.lastEarnDate || null;
+  if (earningsDayPerf === null || earningsDayPerf === undefined) {
+    const em = getEarningsDayMove(p.ticker);
+    if (em) {
+      earningsDayPerf = em.move;
+      if (!lastEarnDate && em.date) lastEarnDate = em.date;
+    }
+  }
   const nextEarnDate = pd?.nextEarnDate || null;
   const daysToNextEarn = pd?.daysToNextEarn !== undefined ? pd.daysToNextEarn : null;
   const high52w = pd?.high52w !== undefined ? pd.high52w : null;
@@ -3667,8 +3865,20 @@ function renderMapPane(container, items, title) {
           <div class="cell-pct" style="font-size:${pctSize}px">${displayValStr}</div>
         `;
       }
-      div.addEventListener('click', () => {
-        setTxnFilter(cell.ticker);
+      div.addEventListener('click', (e) => {
+        if (e.shiftKey || (colorMode === 'earnday' && e.altKey)) {
+          promptEditEarningsMove(cell.ticker);
+        } else {
+          setTxnFilter(cell.ticker);
+        }
+      });
+      div.addEventListener('contextmenu', (e) => {
+        e.preventDefault();
+        if (colorMode === 'earnday') {
+          promptEditEarningsMove(cell.ticker);
+        } else {
+          promptEditPrice(cell.ticker, cell.price || 0);
+        }
       });
       div.addEventListener('mousemove', (e) => {
         const tt = document.getElementById('tooltip');
@@ -3710,7 +3920,10 @@ function renderMapPane(container, items, title) {
         setTtMetric('tt-row-pe', 'tt-pe', cell.pe, v => v > 0 ? `${v.toFixed(1)}x` : (v < 0 ? 'Deficit' : '—'));
         setTtMetric('tt-row-fwdpe', 'tt-fwdpe', cell.forwardPe, v => `${v.toFixed(1)}x`);
         setTtMetric('tt-row-earn', 'tt-earn', cell.earningsSurprise, v => `<span class="${colorClass(v)}">${fmtSign(v)}%</span>`);
-        setTtMetric('tt-row-earnday', 'tt-earnday', cell.earningsDayPerf, v => `<span class="${colorClass(v)}">${fmtSign(v)}%</span>`);
+        setTtMetric('tt-row-earnday', 'tt-earnday', cell.earningsDayPerf, v => {
+          const dateStr = cell.lastEarnDate ? ` <span style="font-size:10px; color:var(--muted);">(${cell.lastEarnDate})</span>` : '';
+          return `<span class="${colorClass(v)}">${fmtSign(v)}%</span>${dateStr}`;
+        });
         setTtMetric('tt-row-nextearn', 'tt-nextearn', cell.daysToNextEarn, v => {
           const dateStr = cell.nextEarnDate ? ` (${cell.nextEarnDate})` : '';
           if (v > 0) return `<span style="color:var(--gold); font-weight:600;">In ${v}d${dateStr}</span>`;
