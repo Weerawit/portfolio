@@ -1012,6 +1012,8 @@
   <div class="tt-row" id="tt-row-pe" style="display:none;"><span class="tt-key">P/E (TTM)</span><span id="tt-pe"></span></div>
   <div class="tt-row" id="tt-row-fwdpe" style="display:none;"><span class="tt-key">Forward P/E</span><span id="tt-fwdpe"></span></div>
   <div class="tt-row" id="tt-row-earn" style="display:none;"><span class="tt-key">Earn Surprise</span><span id="tt-earn"></span></div>
+  <div class="tt-row" id="tt-row-earnday" style="display:none;"><span class="tt-key">Earn Day Move</span><span id="tt-earnday"></span></div>
+  <div class="tt-row" id="tt-row-nextearn" style="display:none;"><span class="tt-key">Next Earnings</span><span id="tt-nextearn"></span></div>
   <div class="tt-row" id="tt-row-dd" style="display:none;"><span class="tt-key">From 52W High</span><span id="tt-dd"></span></div>
   <div class="tt-row"><span class="tt-key">Position Value</span><span id="tt-mv"></span></div>
   <div class="tt-row"><span class="tt-key">Total Gain %</span><span id="tt-gp"></span></div>
@@ -1253,6 +1255,7 @@
         <button class="map-btn" onclick="setColorMode('pe',this)">P/E (TTM)</button>
         <button class="map-btn" onclick="setColorMode('forwardPe',this)">Forward P/E</button>
         <button class="map-btn" onclick="setColorMode('earnings',this)">Earnings Surprise</button>
+        <button class="map-btn" onclick="setColorMode('earnday',this)">Earnings Day Move</button>
         <button class="map-btn" onclick="setColorMode('drawdown52w',this)">% Below 52W High</button>
       </div>
     </div>
@@ -2880,6 +2883,14 @@ async function fetchPricesFinnhub(tickers) {
           if (tv.high52w !== null && tv.high52w !== undefined && !val.high52w) {
             val.high52w = tv.high52w;
           }
+          if (tv.lastEarnDate) val.lastEarnDate = tv.lastEarnDate;
+          if (tv.nextEarnDate) val.nextEarnDate = tv.nextEarnDate;
+          if (tv.daysToNextEarn !== null) val.daysToNextEarn = tv.daysToNextEarn;
+          if (val.earningsDayPerf === null || val.earningsDayPerf === undefined) {
+            if (tv.isRecentEarn && typeof val.changePct === 'number') {
+              val.earningsDayPerf = val.changePct;
+            }
+          }
         }
         if (typeof val.price === 'number' && typeof val.high52w === 'number' && val.high52w > 0) {
           val.drawdown52w = ((val.price - val.high52w) / val.high52w) * 100;
@@ -2935,7 +2946,10 @@ async function fetchAmericaScannerMetrics(tickers) {
   try {
     const payload = {
       symbols: { query: { types: [] }, tickers: [] },
-      columns: ["name", "close", "change", "Perf.W", "Perf.1M", "price_earnings_ttm", "price_52_week_high"],
+      columns: [
+        "name", "close", "change", "Perf.W", "Perf.1M", "price_earnings_ttm", "price_52_week_high",
+        "earnings_release_date", "earnings_release_next_date", "earnings_release_time"
+      ],
       filter: [{ left: "name", operation: "in_range", right: valid }]
     };
     const res = await fetch('https://scanner.tradingview.com/america/scan', {
@@ -2951,11 +2965,25 @@ async function fetchAmericaScannerMetrics(tickers) {
           const d = item.d || [];
           const name = ((d[0] || '').toUpperCase()) || (item.s ? item.s.split(':').pop().toUpperCase() : '');
           if (name) {
+            const lastEarnTs = typeof d[7] === 'number' ? d[7] : null;
+            const nextEarnTs = typeof d[8] === 'number' ? d[8] : null;
+            const nowSec = Math.floor(Date.now() / 1000);
+            const daysToNext = nextEarnTs ? Math.ceil((nextEarnTs - nowSec) / 86400) : null;
+            const lastEarnDateStr = lastEarnTs ? new Date(lastEarnTs * 1000).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : null;
+            const nextEarnDateStr = nextEarnTs ? new Date(nextEarnTs * 1000).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : null;
+            const isRecent = lastEarnTs && (nowSec - lastEarnTs < 86400 * 3);
+
             map[name] = {
               perfW: typeof d[3] === 'number' ? d[3] : null,
               perf1M: typeof d[4] === 'number' ? d[4] : null,
               pe: typeof d[5] === 'number' ? d[5] : null,
-              high52w: typeof d[6] === 'number' ? d[6] : null
+              high52w: typeof d[6] === 'number' ? d[6] : null,
+              lastEarnTs: lastEarnTs,
+              lastEarnDate: lastEarnDateStr,
+              nextEarnTs: nextEarnTs,
+              nextEarnDate: nextEarnDateStr,
+              daysToNextEarn: daysToNext,
+              isRecentEarn: isRecent
             };
           }
         });
@@ -3166,6 +3194,10 @@ function getRow(p) {
   const pe = pd?.pe !== undefined ? pd.pe : null;
   const forwardPe = pd?.forwardPe !== undefined ? pd.forwardPe : null;
   const earningsSurprise = pd?.earningsSurprise !== undefined ? pd.earningsSurprise : null;
+  const earningsDayPerf = pd?.earningsDayPerf !== undefined ? pd.earningsDayPerf : null;
+  const lastEarnDate = pd?.lastEarnDate || null;
+  const nextEarnDate = pd?.nextEarnDate || null;
+  const daysToNextEarn = pd?.daysToNextEarn !== undefined ? pd.daysToNextEarn : null;
   const high52w = pd?.high52w !== undefined ? pd.high52w : null;
   const drawdown52w = pd?.drawdown52w !== undefined ? pd.drawdown52w : ((typeof price === 'number' && typeof high52w === 'number' && high52w > 0) ? ((price - high52w) / high52w) * 100 : null);
 
@@ -3185,6 +3217,10 @@ function getRow(p) {
     pe,
     forwardPe,
     earningsSurprise,
+    earningsDayPerf,
+    lastEarnDate,
+    nextEarnDate,
+    daysToNextEarn,
     high52w,
     drawdown52w
   };
@@ -3422,7 +3458,7 @@ function getColorClass(val) {
     hi = 10; md = 4;
   } else if (colorMode === 'total') {
     hi = 15; md = 5;
-  } else if (colorMode === 'earnings') {
+  } else if (colorMode === 'earnings' || colorMode === 'earnday') {
     hi = 8; md = 2;
   }
 
@@ -3452,6 +3488,8 @@ function formatCellMetric(cell) {
       return cell.forwardPe !== null && cell.forwardPe !== undefined && cell.forwardPe > 0 ? `${cell.forwardPe.toFixed(1)}x` : '—';
     case 'earnings':
       return cell.earningsSurprise !== null && cell.earningsSurprise !== undefined ? `${fmtSign(cell.earningsSurprise)}%` : '—';
+    case 'earnday':
+      return cell.earningsDayPerf !== null && cell.earningsDayPerf !== undefined ? `${fmtSign(cell.earningsDayPerf)}%` : '—';
     case 'drawdown52w':
       return cell.drawdown52w !== null && cell.drawdown52w !== undefined ? `${fmtSign(cell.drawdown52w)}%` : '—';
     default:
@@ -3488,6 +3526,9 @@ function updateMapLegend() {
   } else if (colorMode === 'earnings') {
     labels[0].textContent = 'Miss (-8%)';
     labels[1].textContent = 'Beat (+8%)';
+  } else if (colorMode === 'earnday') {
+    labels[0].textContent = 'Down (-8%)';
+    labels[1].textContent = 'Up (+8%)';
   } else if (colorMode === 'drawdown52w') {
     labels[0].textContent = '-35% (Dip)';
     labels[1].textContent = '0% (52W High)';
@@ -3567,6 +3608,7 @@ function getColorValue(cell) {
     case 'pe': return cell.pe !== null && cell.pe !== undefined ? cell.pe : null;
     case 'forwardPe': return cell.forwardPe !== null && cell.forwardPe !== undefined ? cell.forwardPe : null;
     case 'earnings': return cell.earningsSurprise !== null && cell.earningsSurprise !== undefined ? cell.earningsSurprise : 0;
+    case 'earnday': return cell.earningsDayPerf !== null && cell.earningsDayPerf !== undefined ? cell.earningsDayPerf : 0;
     case 'drawdown52w': return cell.drawdown52w !== null && cell.drawdown52w !== undefined ? cell.drawdown52w : 0;
     default: return cell.changePct || 0;
   }
@@ -3668,6 +3710,13 @@ function renderMapPane(container, items, title) {
         setTtMetric('tt-row-pe', 'tt-pe', cell.pe, v => v > 0 ? `${v.toFixed(1)}x` : (v < 0 ? 'Deficit' : '—'));
         setTtMetric('tt-row-fwdpe', 'tt-fwdpe', cell.forwardPe, v => `${v.toFixed(1)}x`);
         setTtMetric('tt-row-earn', 'tt-earn', cell.earningsSurprise, v => `<span class="${colorClass(v)}">${fmtSign(v)}%</span>`);
+        setTtMetric('tt-row-earnday', 'tt-earnday', cell.earningsDayPerf, v => `<span class="${colorClass(v)}">${fmtSign(v)}%</span>`);
+        setTtMetric('tt-row-nextearn', 'tt-nextearn', cell.daysToNextEarn, v => {
+          const dateStr = cell.nextEarnDate ? ` (${cell.nextEarnDate})` : '';
+          if (v > 0) return `<span style="color:var(--gold); font-weight:600;">In ${v}d${dateStr}</span>`;
+          if (v === 0) return `<span style="color:var(--loss); font-weight:700;">TODAY!${dateStr}</span>`;
+          return `<span style="color:var(--muted);">${cell.nextEarnDate || '—'}</span>`;
+        });
         setTtMetric('tt-row-dd', 'tt-dd', cell.drawdown52w, v => `<span class="${colorClass(v)}">${fmtSign(v)}%</span>`);
       });
       div.addEventListener('mouseleave', () => {
@@ -3737,6 +3786,12 @@ function renderMap() {
     rightItems = items.filter(r => !r.isCash && (r.earningsSurprise !== null && r.earningsSurprise !== undefined && r.earningsSurprise < 0)).sort((a,b) => b.value - a.value);
     leftTitle = 'Beat Estimates / Cash';
     rightTitle = 'Missed Estimates';
+  } else if (colorMode === 'earnday') {
+    // Left: Positive Reaction (>= 0 / Cash), Right: Negative Reaction (< 0)
+    leftItems = items.filter(r => r.isCash || (r.earningsDayPerf !== null && r.earningsDayPerf !== undefined && r.earningsDayPerf >= 0)).sort((a,b) => b.value - a.value);
+    rightItems = items.filter(r => !r.isCash && (r.earningsDayPerf === null || r.earningsDayPerf === undefined || r.earningsDayPerf < 0)).sort((a,b) => b.value - a.value);
+    leftTitle = 'Positive Reaction / Cash';
+    rightTitle = 'Negative Reaction';
   } else {
     // Standard Gainers / Losers for day, week, month, total
     let key = 'changePct';
