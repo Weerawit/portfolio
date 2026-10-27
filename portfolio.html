@@ -249,14 +249,22 @@
     flex-wrap: wrap;
   }
   .map-label { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: 0.8px; }
-  .map-toggle { display: flex; gap: 2px; }
+  .map-toggle { display: flex; gap: 4px; flex-wrap: wrap; }
   .map-btn {
-    padding: 5px 12px;
-    border-radius: 5px; border: 1px solid var(--border2);
+    padding: 5px 11px;
+    border-radius: 6px; border: 1px solid var(--border2);
     background: var(--bg3); color: var(--muted);
     font-family: inherit; font-size: 11px; cursor: pointer;
+    transition: all 0.15s ease;
   }
-  .map-btn.active { background: var(--accent); border-color: var(--accent); color: white; }
+  .map-btn:hover {
+    color: var(--text);
+    border-color: var(--border);
+    background: var(--bg2);
+  }
+  .map-btn.active { background: var(--accent); border-color: var(--accent); color: white; font-weight: 600; }
+  .tt-row { display: flex; justify-content: space-between; gap: 14px; margin-bottom: 3px; font-size: 11px; }
+  .tt-key { color: var(--muted); }
 
   #treemap-wrapper {
     display: grid;
@@ -999,6 +1007,12 @@
   <div class="tt-name" id="tt-name"></div>
   <div class="tt-row"><span class="tt-key">Price</span><span id="tt-price"></span></div>
   <div class="tt-row"><span class="tt-key">1-Day %</span><span id="tt-chgpct"></span></div>
+  <div class="tt-row" id="tt-row-week" style="display:none;"><span class="tt-key">1-Week %</span><span id="tt-week"></span></div>
+  <div class="tt-row" id="tt-row-month" style="display:none;"><span class="tt-key">1-Month %</span><span id="tt-month"></span></div>
+  <div class="tt-row" id="tt-row-pe" style="display:none;"><span class="tt-key">P/E (TTM)</span><span id="tt-pe"></span></div>
+  <div class="tt-row" id="tt-row-fwdpe" style="display:none;"><span class="tt-key">Forward P/E</span><span id="tt-fwdpe"></span></div>
+  <div class="tt-row" id="tt-row-earn" style="display:none;"><span class="tt-key">Earn Surprise</span><span id="tt-earn"></span></div>
+  <div class="tt-row" id="tt-row-dd" style="display:none;"><span class="tt-key">From 52W High</span><span id="tt-dd"></span></div>
   <div class="tt-row"><span class="tt-key">Position Value</span><span id="tt-mv"></span></div>
   <div class="tt-row"><span class="tt-key">Total Gain %</span><span id="tt-gp"></span></div>
 </div>
@@ -1189,6 +1203,7 @@
             <th>Action</th>
             <th>Qty</th>
             <th>Price</th>
+            <th>Total Amount</th>
             <th>Gain / Loss</th>
             <th>Actions</th>
           </tr>
@@ -1228,11 +1243,17 @@
   <div id="view-map">
     <div class="map-controls">
       <span class="map-label">Map ratio 19:6</span>
-      <span class="map-label">Split Gainer / Loser</span>
+      <span class="map-label">Split View</span>
       <span class="map-label" style="margin-left:auto">Color by</span>
       <div class="map-toggle" id="map-color-toggle">
         <button class="map-btn active" onclick="setColorMode('day',this)">1-Day %</button>
+        <button class="map-btn" onclick="setColorMode('week',this)">1-Week %</button>
+        <button class="map-btn" onclick="setColorMode('month',this)">1-Month %</button>
         <button class="map-btn" onclick="setColorMode('total',this)">Total Gain %</button>
+        <button class="map-btn" onclick="setColorMode('pe',this)">P/E (TTM)</button>
+        <button class="map-btn" onclick="setColorMode('forwardPe',this)">Forward P/E</button>
+        <button class="map-btn" onclick="setColorMode('earnings',this)">Earnings Surprise</button>
+        <button class="map-btn" onclick="setColorMode('drawdown52w',this)">% Below 52W High</button>
       </div>
     </div>
     <div id="treemap-wrapper">
@@ -2167,7 +2188,7 @@ function renderTransactions() {
   const prevScroll = wrap ? wrap.scrollTop : 0;
   
   if (!transactions.length) {
-    tbody.innerHTML = '<tr><td colspan="8" style="color: var(--muted); text-align:center; padding:14px;">No transactions yet.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="9" style="color: var(--muted); text-align:center; padding:14px;">No transactions yet.</td></tr>';
     currentVisibleTxns = [];
     updateTxnSelectionSummary();
     return;
@@ -2186,7 +2207,7 @@ function renderTransactions() {
   }
   
   if (!filtered.length) {
-    tbody.innerHTML = `<tr><td colspan="8" style="color: var(--muted); text-align:center; padding:14px;">No transactions found for ${activeFilter}${txnExactMatch ? ' (Exact)' : ''}.</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="9" style="color: var(--muted); text-align:center; padding:14px;">No transactions found for ${activeFilter}${txnExactMatch ? ' (Exact)' : ''}.</td></tr>`;
     currentVisibleTxns = [];
     updateTxnSelectionSummary();
     return;
@@ -2239,6 +2260,9 @@ function renderTransactions() {
       isRowFiltered ? 'selected-row' : ''
     ].filter(Boolean).join(' ');
 
+    const totalVal = (tx.shares !== undefined && tx.shares !== null ? tx.shares : 1) * (tx.price || 0);
+    const totalStr = `${sym}${totalVal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
     return `
       <tr onclick="onTxnRowClick(event, ${originalIndex})" class="${rowClass}">
         <td onclick="event.stopPropagation();" style="text-align: center;">
@@ -2249,6 +2273,7 @@ function renderTransactions() {
         <td>${actionBadge}</td>
         <td>${fmtShares(tx.shares)}</td>
         <td class="money-val" title="Click to view in ${altCurr}" onclick="event.stopPropagation(); showMoneyPopover(${tx.price}, event, '${ticker} Txn Price')">${sym}${tx.price.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+        <td class="money-val" title="Click to view in ${altCurr}" onclick="event.stopPropagation(); showMoneyPopover(${totalVal}, event, '${ticker} Total Amount')">${totalStr}</td>
         <td>${gainPctStr}</td>
         <td><button class="tx-delete-btn" onclick="deleteTransaction(${originalIndex}); event.stopPropagation();">Delete</button></td>
       </tr>`;
@@ -2719,7 +2744,7 @@ async function fetchPricesTradingView(tickers) {
   try {
     const payload = {
       symbols: { tickers: tvTickers },
-      columns: ["close", "change", "change_abs", "description"]
+      columns: ["close", "change", "change_abs", "description", "Perf.W", "Perf.1M", "price_earnings_ttm", "price_52_week_high"]
     };
 
     // Use text/plain to qualify as a simple CORS request and avoid OPTIONS preflight
@@ -2741,6 +2766,13 @@ async function fetchPricesTradingView(tickers) {
           const changePct = d[1];
           const changeD = d[2];
           const desc = d[3];
+          const perfW = d[4];
+          const perf1M = d[5];
+          const pe = d[6];
+          const high52w = d[7];
+          const drawdown52w = (typeof close === 'number' && typeof high52w === 'number' && high52w > 0)
+            ? ((close - high52w) / high52w) * 100
+            : null;
 
           if (s === 'SET:SET') {
             const benchHdr = document.getElementById('hdr-spx');
@@ -2753,6 +2785,13 @@ async function fetchPricesTradingView(tickers) {
                 price: close,
                 changePct: typeof changePct === 'number' ? changePct : 0,
                 changeD: typeof changeD === 'number' ? changeD : 0,
+                weekChangePct: typeof perfW === 'number' ? perfW : null,
+                monthChangePct: typeof perf1M === 'number' ? perf1M : null,
+                pe: typeof pe === 'number' ? pe : null,
+                forwardPe: null,
+                earningsSurprise: null,
+                high52w: typeof high52w === 'number' ? high52w : null,
+                drawdown52w: drawdown52w,
                 name: desc || rawTicker,
                 industry: 'Thai DR / SET',
                 source: 'TradingView'
@@ -2812,13 +2851,29 @@ async function fetchPricesFinnhub(tickers) {
   try {
     fetchExchangeRate(); // Refresh USD/THB live rate in parallel
     
-    // Fetch in parallel for fast update
-    const results = await Promise.allSettled(finnhubTickers.map(fetchTickerPrice));
+    // Fetch TradingView America scanner metrics & Finnhub in parallel
+    const [tvMap, ...results] = await Promise.all([
+      fetchAmericaScannerMetrics(finnhubTickers),
+      ...finnhubTickers.map(t => fetchTickerPrice(t))
+    ]);
     let successCount = 0;
     results.forEach((res, idx) => {
       const ticker = finnhubTickers[idx];
       if (res.status === 'fulfilled' && res.value) {
-        priceData[ticker] = res.value;
+        const val = { ...res.value };
+        const tv = tvMap ? tvMap[ticker] : null;
+        if (tv) {
+          if (tv.perfW !== null && val.weekChangePct === null) val.weekChangePct = tv.perfW;
+          if (tv.perf1M !== null) val.monthChangePct = tv.perf1M;
+          if (tv.pe !== null && !val.pe) val.pe = tv.pe;
+          if (tv.high52w !== null && !val.high52w) {
+            val.high52w = tv.high52w;
+          }
+        }
+        if (typeof val.price === 'number' && typeof val.high52w === 'number' && val.high52w > 0) {
+          val.drawdown52w = ((val.price - val.high52w) / val.high52w) * 100;
+        }
+        priceData[ticker] = val;
         successCount++;
       }
     });
@@ -2847,6 +2902,72 @@ async function fetchPricesFinnhub(tickers) {
     }
     console.warn('Price refresh failed', e);
   }
+}
+
+// TradingView America scanner for quick 1W, 1M, PE, 52W High
+async function fetchAmericaScannerMetrics(tickers) {
+  const valid = (tickers || []).filter(t => t && t !== 'CASH' && t !== 'SPX');
+  if (!valid.length) return {};
+  try {
+    const payload = {
+      symbols: { query: { types: [] }, tickers: [] },
+      columns: ["name", "close", "change", "Perf.W", "Perf.1M", "price_earnings_ttm", "price_52_week_high"],
+      filter: [{ left: "name", operation: "in_range", right: valid }]
+    };
+    const res = await fetch('https://scanner.tradingview.com/america/scan', {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain' },
+      body: JSON.stringify(payload)
+    });
+    if (res.ok) {
+      const json = await res.json();
+      const map = {};
+      if (json && Array.isArray(json.data)) {
+        json.data.forEach(item => {
+          const d = item.d || [];
+          const name = d[0];
+          if (name) {
+            map[name] = {
+              perfW: typeof d[3] === 'number' ? d[3] : null,
+              perf1M: typeof d[4] === 'number' ? d[4] : null,
+              pe: typeof d[5] === 'number' ? d[5] : null,
+              high52w: typeof d[6] === 'number' ? d[6] : null
+            };
+          }
+        });
+      }
+      return map;
+    }
+  } catch (err) {
+    console.warn('TradingView America scanner failed:', err);
+  }
+  return {};
+}
+
+// Local cache for company fundamentals (P/E, Forward P/E, Earnings Surprise)
+const FUNDAMENTALS_CACHE_KEY = 'portfolio_fundamentals_cache_v1';
+function getCachedFundamentals(ticker) {
+  try {
+    const raw = localStorage.getItem(FUNDAMENTALS_CACHE_KEY);
+    if (!raw) return null;
+    const cache = JSON.parse(raw);
+    const item = cache[ticker];
+    if (item && item.timestamp && (Date.now() - item.timestamp < 12 * 3600 * 1000)) {
+      return item.data;
+    }
+    return null;
+  } catch (e) {
+    return null;
+  }
+}
+
+function setCachedFundamentals(ticker, data) {
+  try {
+    const raw = localStorage.getItem(FUNDAMENTALS_CACHE_KEY);
+    const cache = raw ? JSON.parse(raw) : {};
+    cache[ticker] = { timestamp: Date.now(), data };
+    localStorage.setItem(FUNDAMENTALS_CACHE_KEY, JSON.stringify(cache));
+  } catch (e) {}
 }
 
 // Local cache for company profile to avoid redundant profile2 requests
@@ -2926,7 +3047,72 @@ async function fetchTickerPrice(ticker) {
     }
   }
 
-  return { price, changePct, changeD, marketCap, industry, name };
+  // Fundamentals (Forward P/E, P/E, 52W High, Earnings Surprise)
+  let forwardPe = null;
+  let pe = null;
+  let weekChangePct = null;
+  let high52w = null;
+  let earningsSurprise = null;
+
+  if (ticker !== 'SPX') {
+    const cachedFund = getCachedFundamentals(ticker);
+    if (cachedFund) {
+      forwardPe = cachedFund.forwardPe;
+      pe = cachedFund.pe;
+      weekChangePct = cachedFund.weekChangePct;
+      high52w = cachedFund.high52w;
+      earningsSurprise = cachedFund.earningsSurprise;
+    } else {
+      try {
+        const metricUrl = `${FINNHUB_BASE_URL}/api/v1/stock/metric?symbol=${encodeURIComponent(apiTicker)}&metric=all&token=${FINNHUB_API_KEY}`;
+        const metricRes = await fetch(metricUrl);
+        if (metricRes.ok) {
+          const mJson = await metricRes.json();
+          const m = mJson?.metric || {};
+          forwardPe = typeof m.forwardPE === 'number' ? m.forwardPE : null;
+          pe = typeof m.peTTM === 'number' ? m.peTTM : null;
+          weekChangePct = typeof m['5DayPriceReturnDaily'] === 'number' ? m['5DayPriceReturnDaily'] : null;
+          high52w = typeof m['52WeekHigh'] === 'number' ? m['52WeekHigh'] : null;
+        }
+      } catch (err) {
+        console.warn(`Metric fetch failed for ${ticker}`, err);
+      }
+
+      try {
+        const earnUrl = `${FINNHUB_BASE_URL}/api/v1/stock/earnings?symbol=${encodeURIComponent(apiTicker)}&token=${FINNHUB_API_KEY}`;
+        const earnRes = await fetch(earnUrl);
+        if (earnRes.ok) {
+          const eJson = await earnRes.json();
+          if (Array.isArray(eJson) && eJson.length > 0 && typeof eJson[0].surprisePercent === 'number') {
+            earningsSurprise = eJson[0].surprisePercent;
+          }
+        }
+      } catch (err) {
+        console.warn(`Earnings fetch failed for ${ticker}`, err);
+      }
+
+      setCachedFundamentals(ticker, { forwardPe, pe, weekChangePct, high52w, earningsSurprise });
+    }
+  }
+
+  const drawdown52w = (typeof price === 'number' && typeof high52w === 'number' && high52w > 0)
+    ? ((price - high52w) / high52w) * 100
+    : null;
+
+  return {
+    price,
+    changePct,
+    changeD,
+    marketCap,
+    industry,
+    name,
+    forwardPe,
+    pe,
+    weekChangePct,
+    high52w,
+    drawdown52w,
+    earningsSurprise
+  };
 }
 
 function getRow(p) {
@@ -2941,7 +3127,34 @@ function getRow(p) {
   const gainD = marketValue !== null ? marketValue - p.totalCost : null;
   const gainPct = gainD !== null && p.totalCost ? (gainD / p.totalCost) * 100 : null;
   const changeD = priceChange !== undefined ? priceChange * p.shares : null;
-  return { ...p, name, industry, price, changePct, marketValue, gainD, gainPct, changeD, marketCap };
+
+  const weekChangePct = pd?.weekChangePct !== undefined ? pd.weekChangePct : null;
+  const monthChangePct = pd?.monthChangePct !== undefined ? pd.monthChangePct : null;
+  const pe = pd?.pe !== undefined ? pd.pe : null;
+  const forwardPe = pd?.forwardPe !== undefined ? pd.forwardPe : null;
+  const earningsSurprise = pd?.earningsSurprise !== undefined ? pd.earningsSurprise : null;
+  const high52w = pd?.high52w !== undefined ? pd.high52w : null;
+  const drawdown52w = pd?.drawdown52w !== undefined ? pd.drawdown52w : ((typeof price === 'number' && typeof high52w === 'number' && high52w > 0) ? ((price - high52w) / high52w) * 100 : null);
+
+  return {
+    ...p,
+    name,
+    industry,
+    price,
+    changePct,
+    marketValue,
+    gainD,
+    gainPct,
+    changeD,
+    marketCap,
+    weekChangePct,
+    monthChangePct,
+    pe,
+    forwardPe,
+    earningsSurprise,
+    high52w,
+    drawdown52w
+  };
 }
 function sortTable(col) {
   if (sortCol === col) sortAsc = !sortAsc;
@@ -3145,10 +3358,40 @@ function setColorMode(m, btn) {
   btn.classList.add('active');
   renderMap();
 }
+
 function getColorClass(val) {
-  const isDay = colorMode === 'day';
-  const hi = isDay ? 3 : 15;
-  const md = isDay ? 1 : 5;
+  if (val === null || val === undefined) return 'neutral-c';
+
+  if (colorMode === 'pe' || colorMode === 'forwardPe') {
+    if (val <= 0) return 'neutral-c';
+    if (val <= 15) return 'gain-hi';  // Highly attractive / value (green)
+    if (val <= 22) return 'gain-md';  // Fair / reasonable value
+    if (val <= 28) return 'gain-lo';  // Moderate growth
+    if (val <= 38) return 'loss-lo';  // Premium
+    if (val <= 48) return 'loss-md';  // High premium
+    return 'loss-hi';                // Very high premium / expensive (red)
+  }
+
+  if (colorMode === 'drawdown52w') {
+    if (val >= -3) return 'gain-hi';   // Near 52W high (0 to -3%)
+    if (val >= -8) return 'gain-md';   // Strong (-3% to -8%)
+    if (val >= -15) return 'gain-lo';  // Minor pullback (-8% to -15%)
+    if (val >= -25) return 'loss-lo';  // Moderate correction (-15% to -25%)
+    if (val >= -35) return 'loss-md';  // Deep correction (-25% to -35%)
+    return 'loss-hi';                  // Crash (> -35% down)
+  }
+
+  let hi = 3;
+  let md = 1;
+  if (colorMode === 'week') {
+    hi = 5; md = 2;
+  } else if (colorMode === 'month') {
+    hi = 10; md = 4;
+  } else if (colorMode === 'total') {
+    hi = 15; md = 5;
+  } else if (colorMode === 'earnings') {
+    hi = 8; md = 2;
+  }
 
   if (val >= hi) return 'gain-hi';
   if (val >= md) return 'gain-md';
@@ -3157,6 +3400,68 @@ function getColorClass(val) {
   if (val > -md) return 'loss-lo';
   if (val > -hi) return 'loss-md';
   return 'loss-hi';
+}
+
+function formatCellMetric(cell) {
+  if (cell.isCash) return 'CASH';
+  switch (colorMode) {
+    case 'day':
+      return cell.changePct !== undefined ? fmtSign(cell.changePct) + '%' : '—';
+    case 'week':
+      return cell.weekChangePct !== null && cell.weekChangePct !== undefined ? fmtSign(cell.weekChangePct) + '%' : '—';
+    case 'month':
+      return cell.monthChangePct !== null && cell.monthChangePct !== undefined ? fmtSign(cell.monthChangePct) + '%' : '—';
+    case 'total':
+      return cell.gainPct !== null && cell.gainPct !== undefined ? fmtSign(cell.gainPct) + '%' : '—';
+    case 'pe':
+      return cell.pe !== null && cell.pe !== undefined && cell.pe > 0 ? `${cell.pe.toFixed(1)}x` : (cell.pe < 0 ? 'Deficit' : '—');
+    case 'forwardPe':
+      return cell.forwardPe !== null && cell.forwardPe !== undefined && cell.forwardPe > 0 ? `${cell.forwardPe.toFixed(1)}x` : '—';
+    case 'earnings':
+      return cell.earningsSurprise !== null && cell.earningsSurprise !== undefined ? `${fmtSign(cell.earningsSurprise)}%` : '—';
+    case 'drawdown52w':
+      return cell.drawdown52w !== null && cell.drawdown52w !== undefined ? `${fmtSign(cell.drawdown52w)}%` : '—';
+    default:
+      return cell.changePct !== undefined ? fmtSign(cell.changePct) + '%' : '';
+  }
+}
+
+function updateMapLegend() {
+  const labels = document.querySelectorAll('.legend-label');
+  const blocks = document.querySelectorAll('.legend-block');
+  if (labels.length < 2) return;
+
+  const isPE = colorMode === 'pe' || colorMode === 'forwardPe';
+  const defaultColors = ['#ef4444', '#b91c1c', '#7f1d1d', '#374151', '#14532d', '#16a34a', '#22c55e'];
+  const peColors = ['#22c55e', '#16a34a', '#14532d', '#374151', '#7f1d1d', '#b91c1c', '#ef4444'];
+  const targetColors = isPE ? peColors : defaultColors;
+
+  blocks.forEach((blk, idx) => {
+    if (targetColors[idx]) blk.style.background = targetColors[idx];
+  });
+
+  if (colorMode === 'day') {
+    labels[0].textContent = '-3%';
+    labels[1].textContent = '+3%';
+  } else if (colorMode === 'week') {
+    labels[0].textContent = '-5%';
+    labels[1].textContent = '+5%';
+  } else if (colorMode === 'month') {
+    labels[0].textContent = '-10%';
+    labels[1].textContent = '+10%';
+  } else if (colorMode === 'total') {
+    labels[0].textContent = '-15%';
+    labels[1].textContent = '+15%';
+  } else if (colorMode === 'earnings') {
+    labels[0].textContent = 'Miss (-8%)';
+    labels[1].textContent = 'Beat (+8%)';
+  } else if (colorMode === 'drawdown52w') {
+    labels[0].textContent = '-35% (Dip)';
+    labels[1].textContent = '0% (52W High)';
+  } else if (isPE) {
+    labels[0].textContent = '≤ 15x (Value)';
+    labels[1].textContent = '≥ 45x (High)';
+  }
 }
 function squarify(items, x, y, w, h) {
   if (!items.length) return [];
@@ -3220,7 +3525,18 @@ function squarifyHelper(items, x, y, w, h, total, results) {
   }
 }
 function getColorValue(cell) {
-  return colorMode === 'day' ? (cell.changePct || 0) : (cell.gainPct || 0);
+  if (cell.isCash) return 0;
+  switch (colorMode) {
+    case 'day': return cell.changePct !== undefined ? cell.changePct : 0;
+    case 'week': return cell.weekChangePct !== null && cell.weekChangePct !== undefined ? cell.weekChangePct : 0;
+    case 'month': return cell.monthChangePct !== null && cell.monthChangePct !== undefined ? cell.monthChangePct : 0;
+    case 'total': return cell.gainPct !== null && cell.gainPct !== undefined ? cell.gainPct : 0;
+    case 'pe': return cell.pe !== null && cell.pe !== undefined ? cell.pe : null;
+    case 'forwardPe': return cell.forwardPe !== null && cell.forwardPe !== undefined ? cell.forwardPe : null;
+    case 'earnings': return cell.earningsSurprise !== null && cell.earningsSurprise !== undefined ? cell.earningsSurprise : 0;
+    case 'drawdown52w': return cell.drawdown52w !== null && cell.drawdown52w !== undefined ? cell.drawdown52w : 0;
+    default: return cell.changePct || 0;
+  }
 }
 
 function renderMapPane(container, items, title) {
@@ -3268,12 +3584,12 @@ function renderMapPane(container, items, title) {
       const minDim = Math.min(cell.w, cell.h);
       const fontSize = Math.max(8, Math.min(28, minDim * 0.22));
       const pctSize = Math.max(7, fontSize * 0.55);
-      const displayPct = colorMode === 'day' ? cell.changePct : cell.gainPct;
+      const displayValStr = formatCellMetric(cell);
       if (cell.w > 40 && cell.h > 24) {
         div.innerHTML = `
           <div class="cell-industry">${cell.industry}</div>
           <div class="cell-tick" style="font-size:${fontSize}px">${cell.ticker}</div>
-          <div class="cell-pct" style="font-size:${pctSize}px">${displayPct !== null && displayPct !== undefined ? fmtSign(displayPct) + '%' : ''}</div>
+          <div class="cell-pct" style="font-size:${pctSize}px">${displayValStr}</div>
         `;
       }
       div.addEventListener('click', () => {
@@ -3301,6 +3617,25 @@ function renderMapPane(container, items, title) {
         document.getElementById('tt-chgpct').innerHTML = cell.changePct !== undefined ? `<span class="${colorClass(cell.changePct)}">${fmtSign(cell.changePct)}%</span>` : '—';
         document.getElementById('tt-mv').innerHTML = (cell.marketValue !== null ? sym + cell.marketValue.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2}) : '—') + equivMvStr;
         document.getElementById('tt-gp').innerHTML = cell.gainPct !== null ? `<span class="${colorClass(cell.gainPct)}">${fmtSign(cell.gainPct)}%</span>` : '—';
+
+        // Additional metrics in tooltip
+        const setTtMetric = (rowId, valId, val, fmt) => {
+          const row = document.getElementById(rowId);
+          if (!row) return;
+          if (val !== null && val !== undefined) {
+            row.style.display = 'flex';
+            document.getElementById(valId).innerHTML = fmt(val);
+          } else {
+            row.style.display = 'none';
+          }
+        };
+
+        setTtMetric('tt-row-week', 'tt-week', cell.weekChangePct, v => `<span class="${colorClass(v)}">${fmtSign(v)}%</span>`);
+        setTtMetric('tt-row-month', 'tt-month', cell.monthChangePct, v => `<span class="${colorClass(v)}">${fmtSign(v)}%</span>`);
+        setTtMetric('tt-row-pe', 'tt-pe', cell.pe, v => v > 0 ? `${v.toFixed(1)}x` : (v < 0 ? 'Deficit' : '—'));
+        setTtMetric('tt-row-fwdpe', 'tt-fwdpe', cell.forwardPe, v => `${v.toFixed(1)}x`);
+        setTtMetric('tt-row-earn', 'tt-earn', cell.earningsSurprise, v => `<span class="${colorClass(v)}">${fmtSign(v)}%</span>`);
+        setTtMetric('tt-row-dd', 'tt-dd', cell.drawdown52w, v => `<span class="${colorClass(v)}">${fmtSign(v)}%</span>`);
       });
       div.addEventListener('mouseleave', () => {
         document.getElementById('tooltip').style.display = 'none';
@@ -3338,29 +3673,65 @@ function renderMap() {
     return;
   }
   const items = rows.map(r => ({ ...r, value: Math.max(r.marketValue || 1, 1) }));
-  const key = colorMode === 'day' ? 'changePct' : 'gainPct';
-  const gainers = items.filter(r => (r[key] || 0) >= 0).sort((a,b) => b.value - a.value);
-  const losers = items.filter(r => (r[key] || 0) < 0).sort((a,b) => b.value - a.value);
-  const gainerWeight = gainers.reduce((sum, item) => sum + item.value, 0);
-  const loserWeight = losers.reduce((sum, item) => sum + item.value, 0);
+  
+  let leftItems = [];
+  let rightItems = [];
+  let leftTitle = '';
+  let rightTitle = '';
+
+  if (colorMode === 'pe' || colorMode === 'forwardPe') {
+    // Left: Value / Fair Valuation (P/E <= 25 or Cash), Right: Premium / High Valuation (P/E > 25)
+    const metricKey = colorMode === 'pe' ? 'pe' : 'forwardPe';
+    leftItems = items.filter(r => r.isCash || (r[metricKey] !== null && r[metricKey] !== undefined && r[metricKey] > 0 && r[metricKey] <= 25)).sort((a,b) => b.value - a.value);
+    rightItems = items.filter(r => !r.isCash && (r[metricKey] === null || r[metricKey] === undefined || r[metricKey] <= 0 || r[metricKey] > 25)).sort((a,b) => b.value - a.value);
+    leftTitle = 'Value / Moderate (≤ 25x)';
+    rightTitle = 'Premium / High P/E (> 25x)';
+  } else if (colorMode === 'drawdown52w') {
+    // Left: Near High (within -10% / Cash), Right: Pullback (> -10% down)
+    leftItems = items.filter(r => r.isCash || (r.drawdown52w !== null && r.drawdown52w !== undefined && r.drawdown52w >= -10)).sort((a,b) => b.value - a.value);
+    rightItems = items.filter(r => !r.isCash && (r.drawdown52w !== null && r.drawdown52w !== undefined && r.drawdown52w < -10)).sort((a,b) => b.value - a.value);
+    leftTitle = 'Near 52W High (≥ -10%)';
+    rightTitle = 'Pullback / Dip (< -10%)';
+  } else if (colorMode === 'earnings') {
+    // Left: Beat Estimates (>= 0 / Cash), Right: Missed Estimates (< 0)
+    leftItems = items.filter(r => r.isCash || (r.earningsSurprise !== null && r.earningsSurprise !== undefined && r.earningsSurprise >= 0)).sort((a,b) => b.value - a.value);
+    rightItems = items.filter(r => !r.isCash && (r.earningsSurprise !== null && r.earningsSurprise !== undefined && r.earningsSurprise < 0)).sort((a,b) => b.value - a.value);
+    leftTitle = 'Beat Estimates / Cash';
+    rightTitle = 'Missed Estimates';
+  } else {
+    // Standard Gainers / Losers for day, week, month, total
+    let key = 'changePct';
+    if (colorMode === 'week') key = 'weekChangePct';
+    else if (colorMode === 'month') key = 'monthChangePct';
+    else if (colorMode === 'total') key = 'gainPct';
+
+    leftItems = items.filter(r => (r[key] || 0) >= 0).sort((a,b) => b.value - a.value);
+    rightItems = items.filter(r => (r[key] || 0) < 0).sort((a,b) => b.value - a.value);
+    leftTitle = 'Gainers / Cash';
+    rightTitle = 'Losers';
+  }
+
+  const leftWeight = leftItems.reduce((sum, item) => sum + item.value, 0);
+  const rightWeight = rightItems.reduce((sum, item) => sum + item.value, 0);
+  const totalWeight = leftWeight + rightWeight;
+
   const wrapper = document.getElementById('treemap-wrapper');
-  if (gainerWeight > 0 && loserWeight > 0) {
-    const gainerFrac = gainerWeight / (gainerWeight + loserWeight);
-    const loserFrac = loserWeight / (gainerWeight + loserWeight);
-    wrapper.style.gridTemplateColumns = `${Math.max(gainerFrac, 0.05)}fr ${Math.max(loserFrac, 0.05)}fr`;
+  if (leftWeight > 0 && rightWeight > 0) {
+    const leftFrac = leftWeight / totalWeight;
+    const rightFrac = rightWeight / totalWeight;
+    wrapper.style.gridTemplateColumns = `${Math.max(leftFrac, 0.05)}fr ${Math.max(rightFrac, 0.05)}fr`;
   } else {
     wrapper.style.gridTemplateColumns = '1fr';
   }
-  renderMapPane(gainersContainer, gainers, `Gainers/Cash (${((gainerWeight / (gainerWeight + loserWeight)) * 100 || 0).toLocaleString('en-US', {minimumFractionDigits: 1, maximumFractionDigits: 1})}%)`);
-  renderMapPane(losersContainer, losers, `Losers (${((loserWeight / (gainerWeight + loserWeight)) * 100 || 0).toLocaleString('en-US', {minimumFractionDigits: 1, maximumFractionDigits: 1})}%)`);
 
-  // Update Legend labels
-  const labels = document.querySelectorAll('.legend-label');
-  if (labels.length >= 2) {
-    const limit = colorMode === 'day' ? '3%' : '15%';
-    labels[0].textContent = '-' + limit;
-    labels[1].textContent = '+' + limit;
-  }
+  const leftPctStr = ((leftWeight / (totalWeight || 1)) * 100).toLocaleString('en-US', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+  const rightPctStr = ((rightWeight / (totalWeight || 1)) * 100).toLocaleString('en-US', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+
+  renderMapPane(gainersContainer, leftItems, `${leftTitle} (${leftPctStr}%)`);
+  renderMapPane(losersContainer, rightItems, `${rightTitle} (${rightPctStr}%)`);
+
+  // Update Legend
+  updateMapLegend();
 }
 
 function groupItemsByIndustry(items) {
