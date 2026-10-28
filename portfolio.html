@@ -263,6 +263,27 @@
     background: var(--bg2);
   }
   .map-btn.active { background: var(--accent); border-color: var(--accent); color: white; font-weight: 600; }
+  .map-select {
+    padding: 5px 12px;
+    border-radius: 6px;
+    border: 1px solid var(--border2);
+    background: var(--bg3);
+    color: var(--text);
+    font-family: inherit;
+    font-size: 11px;
+    font-weight: 600;
+    cursor: pointer;
+    outline: none;
+    transition: all 0.15s ease;
+  }
+  .map-select:hover {
+    border-color: var(--accent);
+    background: var(--bg2);
+  }
+  .map-select:focus {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 2px rgba(59,130,246,0.25);
+  }
   .tt-row { display: flex; justify-content: space-between; gap: 14px; margin-bottom: 3px; font-size: 11px; }
   .tt-key { color: var(--muted); }
 
@@ -1016,6 +1037,7 @@
   <div class="tt-row" id="tt-row-nextearn" style="display:none;"><span class="tt-key">Next Earnings</span><span id="tt-nextearn"></span></div>
   <div class="tt-row" id="tt-row-dd" style="display:none;"><span class="tt-key">From 52W High</span><span id="tt-dd"></span></div>
   <div class="tt-row"><span class="tt-key">Position Value</span><span id="tt-mv"></span></div>
+  <div class="tt-row"><span class="tt-key">% Holding (Weight)</span><span id="tt-weight"></span></div>
   <div class="tt-row"><span class="tt-key">Total Gain %</span><span id="tt-gp"></span></div>
 </div>
 
@@ -1102,6 +1124,7 @@
     </div>
     <span class="refresh-dot" id="refresh-dot"></span>
     <button class="btn" onclick="openAvgCalculator()" style="border-color: var(--accent); color: var(--accent);">∑ Avg Calc</button>
+    <button class="btn" onclick="openTargetRebalanceCalc()" style="border-color: #ef4444; color: #f87171;" title="Sell / Trim positions to a target % holding">⚖️ Target % Sell</button>
     <button class="btn" onclick="fetchPrices(true)">↻ Refresh</button>
   </div>
 </header>
@@ -1246,17 +1269,20 @@
     <div class="map-controls">
       <span class="map-label">Map ratio 19:6</span>
       <span class="map-label">Split View</span>
-      <span class="map-label" style="margin-left:auto">Color by</span>
-      <div class="map-toggle" id="map-color-toggle">
-        <button class="map-btn active" onclick="setColorMode('day',this)">1-Day %</button>
-        <button class="map-btn" onclick="setColorMode('week',this)">1-Week %</button>
-        <button class="map-btn" onclick="setColorMode('month',this)">1-Month %</button>
-        <button class="map-btn" onclick="setColorMode('total',this)">Total Gain %</button>
-        <button class="map-btn" onclick="setColorMode('pe',this)">P/E (TTM)</button>
-        <button class="map-btn" onclick="setColorMode('forwardPe',this)">Forward P/E</button>
-        <button class="map-btn" onclick="setColorMode('earnings',this)">Earnings Surprise</button>
-        <button class="map-btn" onclick="setColorMode('earnday',this)">Earnings Day Move</button>
-        <button class="map-btn" onclick="setColorMode('drawdown52w',this)">% Below 52W High</button>
+      <div style="display:flex; align-items:center; gap:8px; margin-left:auto;">
+        <span class="map-label">Color by:</span>
+        <select id="map-color-select" class="map-select" onchange="setColorMode(this.value)">
+          <option value="day" selected>1-Day % (Performance)</option>
+          <option value="week">1-Week % (Performance)</option>
+          <option value="month">1-Month % (Performance)</option>
+          <option value="total">Total Gain % (Return)</option>
+          <option value="holding">% Holding (Portfolio Weight)</option>
+          <option value="pe">P/E Ratio (TTM)</option>
+          <option value="forwardPe">Forward P/E</option>
+          <option value="earnings">Earnings Surprise %</option>
+          <option value="earnday">Earnings Day Move %</option>
+          <option value="drawdown52w">% Below 52W High</option>
+        </select>
       </div>
     </div>
     <div id="treemap-wrapper">
@@ -3466,7 +3492,7 @@ function renderTable() {
       <td>${fmtShares(r.shares)}</td>
       <td class="money-val" title="Click to view in ${altCurr}" onclick="event.stopPropagation(); showMoneyPopover(${r.avgCost}, event, '${r.ticker} Avg Cost')">${sym}${r.avgCost.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})}</td>
       <td class="money-val" title="Click to view in ${altCurr}" onclick="event.stopPropagation(); showMoneyPopover(${r.totalCost}, event, '${r.ticker} Total Cost')">${sym}${r.totalCost.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})}</td>
-      <td>${r.portfolioPct !== null ? `${r.portfolioPct.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}%` : '—'}</td>
+      <td class="money-val" title="Current Weight: ${r.portfolioPct !== null ? r.portfolioPct.toFixed(2) : 0}% · Click to calculate sell/trim to target %" onclick="event.stopPropagation(); openTargetRebalanceCalc('${r.ticker}')" style="cursor:pointer;">${r.portfolioPct !== null ? `${r.portfolioPct.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}%` : '—'} <span style="font-size:10px; opacity:0.45; margin-left:2px;" title="Target % Sell Calculator">⚖️</span></td>
       <td class="money-val" title="Click to view in ${altCurr} · Click ✏️ to edit" onclick="event.stopPropagation(); showMoneyPopover(${r.price !== undefined ? r.price : 0}, event, '${r.ticker} Price')">
         ${priceStr}
         <span onclick="event.stopPropagation(); promptEditPrice('${r.ticker}', ${r.price || 0})" title="Edit price manually" style="cursor:pointer; opacity:0.4; font-size:10px; margin-left:4px; padding:2px;">✏️</span>
@@ -3621,13 +3647,24 @@ function setMapMode(m, btn) {
 }
 function setColorMode(m, btn) {
   colorMode = m;
+  const sel = document.getElementById('map-color-select');
+  if (sel && sel.value !== m) sel.value = m;
   document.querySelectorAll('#map-color-toggle .map-btn').forEach(b => b.classList.remove('active'));
-  btn.classList.add('active');
+  if (btn) btn.classList.add('active');
   renderMap();
 }
 
 function getColorClass(val) {
   if (val === null || val === undefined) return 'neutral-c';
+
+  if (colorMode === 'holding') {
+    if (val >= 20) return 'gain-hi';
+    if (val >= 12) return 'gain-md';
+    if (val >= 6) return 'gain-lo';
+    if (val >= 3) return 'loss-lo';
+    if (val >= 1) return 'loss-md';
+    return 'neutral-c';
+  }
 
   if (colorMode === 'pe' || colorMode === 'forwardPe') {
     if (val <= 0) return 'neutral-c';
@@ -3688,6 +3725,8 @@ function formatCellMetric(cell) {
       return cell.earningsSurprise !== null && cell.earningsSurprise !== undefined ? `${fmtSign(cell.earningsSurprise)}%` : '—';
     case 'earnday':
       return cell.earningsDayPerf !== null && cell.earningsDayPerf !== undefined ? `${fmtSign(cell.earningsDayPerf)}%` : '—';
+    case 'holding':
+      return (typeof cell.holdingPct === 'number') ? `${cell.holdingPct.toFixed(2)}%` : '—';
     case 'drawdown52w':
       return cell.drawdown52w !== null && cell.drawdown52w !== undefined ? `${fmtSign(cell.drawdown52w)}%` : '—';
     default:
@@ -3727,6 +3766,9 @@ function updateMapLegend() {
   } else if (colorMode === 'earnday') {
     labels[0].textContent = 'Down (-8%)';
     labels[1].textContent = 'Up (+8%)';
+  } else if (colorMode === 'holding') {
+    labels[0].textContent = '< 3% (Small)';
+    labels[1].textContent = '> 20% (Core)';
   } else if (colorMode === 'drawdown52w') {
     labels[0].textContent = '-35% (Dip)';
     labels[1].textContent = '0% (52W High)';
@@ -3803,6 +3845,7 @@ function getColorValue(cell) {
     case 'week': return cell.weekChangePct !== null && cell.weekChangePct !== undefined ? cell.weekChangePct : 0;
     case 'month': return cell.monthChangePct !== null && cell.monthChangePct !== undefined ? cell.monthChangePct : 0;
     case 'total': return cell.gainPct !== null && cell.gainPct !== undefined ? cell.gainPct : 0;
+    case 'holding': return cell.holdingPct !== null && cell.holdingPct !== undefined ? cell.holdingPct : 0;
     case 'pe': return cell.pe !== null && cell.pe !== undefined ? cell.pe : null;
     case 'forwardPe': return cell.forwardPe !== null && cell.forwardPe !== undefined ? cell.forwardPe : null;
     case 'earnings': return cell.earningsSurprise !== null && cell.earningsSurprise !== undefined ? cell.earningsSurprise : 0;
@@ -3858,12 +3901,30 @@ function renderMapPane(container, items, title) {
       const fontSize = Math.max(8, Math.min(28, minDim * 0.22));
       const pctSize = Math.max(7, fontSize * 0.55);
       const displayValStr = formatCellMetric(cell);
+      const holdingStr = (typeof cell.holdingPct === 'number') ? `${cell.holdingPct.toFixed(1)}%` : '';
+
       if (cell.w > 40 && cell.h > 24) {
-        div.innerHTML = `
-          <div class="cell-industry">${cell.industry}</div>
-          <div class="cell-tick" style="font-size:${fontSize}px">${cell.ticker}</div>
-          <div class="cell-pct" style="font-size:${pctSize}px">${displayValStr}</div>
-        `;
+        let cellBody = '';
+        if (colorMode === 'holding') {
+          cellBody = `
+            <div class="cell-industry">${cell.industry}</div>
+            <div class="cell-tick" style="font-size:${fontSize}px">${cell.ticker}</div>
+            <div class="cell-pct" style="font-size:${pctSize}px">${displayValStr}</div>
+          `;
+        } else if (cell.h > 48 && cell.w > 60) {
+          cellBody = `
+            <div class="cell-industry">${cell.industry}</div>
+            <div class="cell-tick" style="font-size:${fontSize}px">${cell.ticker} <span style="font-size:${Math.max(7, Math.round(fontSize*0.6))}px; opacity:0.85; font-weight:normal;">(${holdingStr})</span></div>
+            <div class="cell-pct" style="font-size:${pctSize}px">${displayValStr}</div>
+          `;
+        } else {
+          cellBody = `
+            <div class="cell-industry">${cell.industry}</div>
+            <div class="cell-tick" style="font-size:${fontSize}px">${cell.ticker}</div>
+            <div class="cell-pct" style="font-size:${pctSize}px">${displayValStr} <span style="opacity:0.8; font-size:${Math.max(7, Math.round(pctSize*0.85))}px;">(${holdingStr})</span></div>
+          `;
+        }
+        div.innerHTML = cellBody;
       }
       div.addEventListener('click', (e) => {
         if (e.shiftKey || (colorMode === 'earnday' && e.altKey)) {
@@ -3901,6 +3962,11 @@ function renderMapPane(container, items, title) {
         document.getElementById('tt-price').innerHTML = (cell.price !== undefined ? sym + cell.price.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2}) : '—') + equivPriceStr;
         document.getElementById('tt-chgpct').innerHTML = cell.changePct !== undefined ? `<span class="${colorClass(cell.changePct)}">${fmtSign(cell.changePct)}%</span>` : '—';
         document.getElementById('tt-mv').innerHTML = (cell.marketValue !== null ? sym + cell.marketValue.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2}) : '—') + equivMvStr;
+        const ttWeightEl = document.getElementById('tt-weight');
+        if (ttWeightEl) {
+          const hVal = (typeof cell.holdingPct === 'number') ? `${cell.holdingPct.toFixed(2)}%` : '—';
+          ttWeightEl.innerHTML = `<span style="font-weight:600; color:var(--text);">${hVal}</span> <span style="color:var(--muted); font-size:10px;">of portfolio</span>`;
+        }
         document.getElementById('tt-gp').innerHTML = cell.gainPct !== null ? `<span class="${colorClass(cell.gainPct)}">${fmtSign(cell.gainPct)}%</span>` : '—';
 
         // Additional metrics in tooltip
@@ -3973,7 +4039,12 @@ function renderMap() {
     losersContainer.innerHTML = '<div class="pane-empty">Add transactions to build the portfolio map.</div>';
     return;
   }
-  const items = rows.map(r => ({ ...r, value: Math.max(r.marketValue || 1, 1) }));
+  const totalMapMv = rows.reduce((sum, r) => sum + (r.marketValue || 0), 0);
+  const items = rows.map(r => {
+    const val = Math.max(r.marketValue || 1, 1);
+    const holdingPct = totalMapMv > 0 ? ((r.marketValue || 0) / totalMapMv) * 100 : 0;
+    return { ...r, value: val, holdingPct };
+  });
   
   let leftItems = [];
   let rightItems = [];
@@ -3999,6 +4070,12 @@ function renderMap() {
     rightItems = items.filter(r => !r.isCash && (r.earningsSurprise !== null && r.earningsSurprise !== undefined && r.earningsSurprise < 0)).sort((a,b) => b.value - a.value);
     leftTitle = 'Beat Estimates / Cash';
     rightTitle = 'Missed Estimates';
+  } else if (colorMode === 'holding') {
+    // Left: Core Positions (>= 10%), Right: Minor Positions (< 10%)
+    leftItems = items.filter(r => (r.holdingPct || 0) >= 10).sort((a,b) => b.value - a.value);
+    rightItems = items.filter(r => (r.holdingPct || 0) < 10).sort((a,b) => b.value - a.value);
+    leftTitle = 'Core Positions (≥ 10%)';
+    rightTitle = 'Satellite / Minor (< 10%)';
   } else if (colorMode === 'earnday') {
     // Left: Positive Reaction (>= 0 / Cash), Right: Negative Reaction (< 0)
     leftItems = items.filter(r => r.isCash || (r.earningsDayPerf !== null && r.earningsDayPerf !== undefined && r.earningsDayPerf >= 0)).sort((a,b) => b.value - a.value);
@@ -4535,6 +4612,351 @@ function runAvgCalc(triggeredBy, rowIdx) {
     }
   }
 }
+
+// -------------------------------------------------------------
+// TARGET % HOLDING & REBALANCE CALCULATOR (FEATURE)
+// -------------------------------------------------------------
+let currentRebalState = null;
+
+function openTargetRebalanceCalc(targetTicker) {
+  const stockHoldings = PORTFOLIO.filter(p => p.ticker !== 'CASH' && p.shares > 0);
+  if (!stockHoldings.length) {
+    showAlert("No active stock positions in portfolio to rebalance.");
+    return;
+  }
+
+  let selectedTicker = targetTicker;
+  if (!selectedTicker || !stockHoldings.some(p => p.ticker === selectedTicker)) {
+    if (txnFilter && stockHoldings.some(p => p.ticker === txnFilter)) {
+      selectedTicker = txnFilter;
+    } else {
+      const selectedRow = document.querySelector('#portfolio-tbody tr.selected-row');
+      const rowTicker = selectedRow?.dataset?.ticker;
+      if (rowTicker && stockHoldings.some(p => p.ticker === rowTicker)) {
+        selectedTicker = rowTicker;
+      }
+    }
+  }
+  if (!selectedTicker || !stockHoldings.some(p => p.ticker === selectedTicker)) {
+    selectedTicker = stockHoldings[0].ticker;
+  }
+
+  const sym = getCurrencySymbol();
+  const optionsHtml = stockHoldings.map(p => {
+    const curP = priceData[p.ticker]?.price || p.price || 0;
+    const curMv = curP * p.shares;
+    return `<option value="${p.ticker}" ${p.ticker === selectedTicker ? 'selected' : ''}>${p.ticker} (${fmtShares(p.shares)} shs · ${sym}${curMv.toLocaleString('en-US', {maximumFractionDigits:0})})</option>`;
+  }).join('');
+
+  const content = `
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; flex-wrap:wrap; gap:8px;">
+      <div style="font-size:12px; color:var(--muted);">
+        คำนวณจำลองการขายลดสัดส่วนหุ้นให้อยู่ใน % Holding เป้าหมาย (Plan & Simulation)
+      </div>
+      <button type="button" class="btn" onclick="openAvgCalculator(document.getElementById('rebal-ticker')?.value)" style="padding:3px 8px; font-size:11px; border-color:var(--accent); color:var(--accent);">∑ DCA Calculator</button>
+    </div>
+
+    <!-- Ticker & Sim Price Selector -->
+    <div style="display:flex; gap:12px; margin-bottom:12px; flex-wrap:wrap;">
+      <div style="flex:1.5; min-width:180px;">
+        <label class="calc-row-label">Select Holding to Trim / Rebalance</label>
+        <select id="rebal-ticker" class="calc-input" onchange="updateRebalBase(true)">
+          ${optionsHtml}
+        </select>
+      </div>
+      <div style="flex:1; min-width:130px;">
+        <label class="calc-row-label">Sim / Execution Price (${sym})</label>
+        <input type="number" step="any" id="rebal-price" class="calc-input" placeholder="Price" oninput="runRebalCalc('price')">
+      </div>
+    </div>
+
+    <!-- Current Position & Portfolio Context Banner -->
+    <div id="rebal-banner" style="padding:12px 14px; background:rgba(59,130,246,0.06); border:1px solid rgba(59,130,246,0.22); border-radius:8px; font-size:12px; margin-bottom:14px;"></div>
+
+    <!-- Target % Setting Controls -->
+    <div style="background:var(--bg3); padding:14px; border-radius:10px; border:1px solid var(--border2); margin-bottom:14px;">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; flex-wrap:wrap; gap:6px;">
+        <label class="calc-row-label" style="margin:0; font-weight:600; color:var(--text);">Target % Holding of Portfolio</label>
+        <div style="display:flex; gap:5px; flex-wrap:wrap;">
+          <button type="button" class="calc-preset-btn" onclick="quickRebalPreset(0)" style="color:var(--loss);">Sell All (0%)</button>
+          <button type="button" class="calc-preset-btn" onclick="quickRebalPreset(3)">3%</button>
+          <button type="button" class="calc-preset-btn" onclick="quickRebalPreset(5)">5%</button>
+          <button type="button" class="calc-preset-btn" onclick="quickRebalPreset(10)">10%</button>
+          <button type="button" class="calc-preset-btn" onclick="quickRebalPreset(15)">15%</button>
+          <button type="button" class="calc-preset-btn" onclick="quickRebalPreset('trim2')">-2% Trim</button>
+          <button type="button" class="calc-preset-btn" onclick="quickRebalPreset('trim5')">-5% Trim</button>
+          <button type="button" class="calc-preset-btn" onclick="quickRebalPreset('half')">Half (50%)</button>
+        </div>
+      </div>
+
+      <div style="display:flex; gap:12px; align-items:center; flex-wrap:wrap;">
+        <div style="flex:1; min-width:140px; position:relative;">
+          <input type="number" step="0.01" min="0" max="100" id="rebal-target-pct" class="calc-input" style="font-size:16px; font-weight:700; color:var(--accent); padding-right:28px;" oninput="runRebalCalc('pct')">
+          <span style="position:absolute; right:10px; top:50%; transform:translateY(-50%); color:var(--muted); font-size:13px; font-weight:700;">%</span>
+        </div>
+        <div style="font-size:11px; color:var(--muted); flex:2; min-width:200px;">
+          พิมพ์ระบุเป้าหมาย % หรือคลิกปุ่มลัดด้านบน ระบบจะคำนวณจำนวนหุ้นและยอดเงินที่ต้องขายให้อัตโนมัติ
+        </div>
+      </div>
+
+      <!-- Secondary Bidirectional Inputs -->
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:12px; padding-top:10px; border-top:1px dashed var(--border);">
+        <div>
+          <label style="font-size:10.5px; color:var(--muted); display:block; margin-bottom:3px;">หรือระบุยอดเงินที่ต้องการขาย (${sym}):</label>
+          <input type="number" step="any" min="0" id="rebal-sell-amt-input" class="calc-input" placeholder="Amount ${sym}" oninput="runRebalCalc('amt')">
+        </div>
+        <div>
+          <label style="font-size:10.5px; color:var(--muted); display:block; margin-bottom:3px;">หรือระบุจำนวนหุ้นที่ต้องการขาย (Shares):</label>
+          <input type="number" step="any" min="0" id="rebal-sell-qty-input" class="calc-input" placeholder="Quantity" oninput="runRebalCalc('qty')">
+        </div>
+      </div>
+    </div>
+
+    <!-- Rebalance Calculation Output Cards -->
+    <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(210px, 1fr)); gap:10px; margin-bottom:14px;">
+      <!-- Card 1: To Sell -->
+      <div style="background:rgba(239,68,68,0.06); border:1px solid rgba(239,68,68,0.25); border-radius:8px; padding:12px;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+          <span style="font-size:10px; text-transform:uppercase; letter-spacing:0.7px; color:#f87171; font-weight:600;">🔻 Action / To Sell</span>
+          <span id="rebal-badge" style="font-size:9.5px; padding:2px 6px; border-radius:4px; font-weight:700; background:rgba(239,68,68,0.2); color:#fca5a5;">SELL</span>
+        </div>
+        <div id="rebal-sell-amt" style="font-size:18px; font-weight:700; color:#f87171; margin-bottom:2px;">—</div>
+        <div id="rebal-sell-shares" style="font-size:12px; color:var(--text); font-weight:500;">—</div>
+      </div>
+
+      <!-- Card 2: Remaining Position -->
+      <div style="background:var(--bg2); border:1px solid var(--border); border-radius:8px; padding:12px;">
+        <div style="font-size:10px; text-transform:uppercase; letter-spacing:0.7px; color:var(--muted); font-weight:600; margin-bottom:6px;">📦 Remaining Position</div>
+        <div id="rebal-rem-amt" style="font-size:18px; font-weight:700; color:var(--text); margin-bottom:2px;">—</div>
+        <div id="rebal-rem-shares" style="font-size:12px; color:var(--muted);">—</div>
+      </div>
+
+      <!-- Card 3: Impact & P/L -->
+      <div style="background:var(--bg2); border:1px solid var(--border); border-radius:8px; padding:12px;">
+        <div style="font-size:10px; text-transform:uppercase; letter-spacing:0.7px; color:var(--muted); font-weight:600; margin-bottom:6px;">💰 Estimated P/L & Cash</div>
+        <div id="rebal-pl-amt" style="font-size:16px; font-weight:700; margin-bottom:2px;">—</div>
+        <div id="rebal-cash-amt" style="font-size:11px; color:var(--muted);">—</div>
+      </div>
+    </div>
+  `;
+
+  showModal({
+    title: '⚖️ Target % Holding & Rebalance Calculator',
+    message: content,
+    buttons: [
+      { text: 'Close', primary: true, onClick: () => {} }
+    ]
+  });
+
+  updateRebalBase(false);
+}
+
+function updateRebalBase(isTickerChange) {
+  const tickerEl = document.getElementById('rebal-ticker');
+  if (!tickerEl) return;
+  const ticker = tickerEl.value;
+  const pos = PORTFOLIO.find(p => p.ticker === ticker);
+  if (!pos) return;
+
+  const currentPrice = priceData[ticker]?.price || pos.price || 0;
+  const sym = getCurrencySymbol();
+  const isThb = getActiveCurrency() === 'THB';
+
+  const stockRows = PORTFOLIO.map(getRow);
+  const totalStockMv = stockRows.reduce((sum, r) => sum + (r.marketValue || r.totalCost || 0), 0);
+  const totalNetWorth = totalStockMv + CASH_BALANCE;
+
+  const curPosMv = currentPrice * pos.shares;
+  const curPosWeight = totalNetWorth > 0 ? (curPosMv / totalNetWorth) * 100 : 0;
+  const curPl = pos.shares > 0 ? (currentPrice - pos.avgCost) * pos.shares : 0;
+  const curPlPct = pos.totalCost > 0 ? (curPl / pos.totalCost) * 100 : 0;
+
+  const priceInp = document.getElementById('rebal-price');
+  if (priceInp && (!priceInp.value || isTickerChange)) {
+    priceInp.value = currentPrice ? currentPrice.toFixed(2) : "";
+  }
+
+  const altCurVal = isThb
+    ? `≈ $${(usdThbRate > 0 ? (curPosMv / usdThbRate).toFixed(2) : '0.00')}`
+    : `≈ ฿${Math.round(curPosMv * usdThbRate).toLocaleString('en-US')}`;
+
+  const bannerEl = document.getElementById('rebal-banner');
+  if (bannerEl) {
+    bannerEl.innerHTML = `
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px; flex-wrap:wrap; gap:4px;">
+        <span>Position: <b>${fmtShares(pos.shares)}</b> shares @ Avg <b>${sym}${pos.avgCost.toFixed(2)}</b> (Cost: ${sym}${pos.totalCost.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})})</span>
+        <span class="${colorClass(curPl)}">P/L: <b>${fmtSign(curPlPct)}%</b> (${curPl >= 0 ? '+' : ''}${sym}${Math.abs(curPl).toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})})</span>
+      </div>
+      <div style="display:flex; justify-content:space-between; align-items:center; font-size:11.5px; color:var(--muted); flex-wrap:wrap; gap:4px;">
+        <span>Current Value: <strong style="color:var(--text);">${sym}${curPosMv.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})}</strong> <span style="font-size:10px;">${altCurVal}</span></span>
+        <span>Current Weight: <strong style="color:var(--accent); font-size:13px;">${curPosWeight.toFixed(2)}%</strong> of Net Worth (${sym}${totalNetWorth.toLocaleString('en-US', {maximumFractionDigits:0})})</span>
+      </div>
+    `;
+  }
+
+  const targetPctInp = document.getElementById('rebal-target-pct');
+  if (targetPctInp && (!targetPctInp.value || isTickerChange)) {
+    const defaultTarget = Math.max(0, parseFloat((curPosWeight > 10 ? curPosWeight - 5 : curPosWeight * 0.5).toFixed(1)));
+    targetPctInp.value = defaultTarget;
+  }
+
+  runRebalCalc('pct');
+}
+
+function runRebalCalc(triggeredBy) {
+  const tickerEl = document.getElementById('rebal-ticker');
+  if (!tickerEl) return;
+  const ticker = tickerEl.value;
+  const pos = PORTFOLIO.find(p => p.ticker === ticker);
+  if (!pos) return;
+
+  const simPriceInp = document.getElementById('rebal-price');
+  const simPrice = parseFloat(simPriceInp?.value) || priceData[ticker]?.price || pos.avgCost || 0;
+  if (simPrice <= 0) return;
+
+  const stockRows = PORTFOLIO.map(getRow);
+  const totalStockMv = stockRows.reduce((sum, r) => sum + (r.marketValue || r.totalCost || 0), 0);
+  const totalNetWorth = totalStockMv + CASH_BALANCE;
+  const currentPosMv = pos.shares * simPrice;
+  const sym = getCurrencySymbol();
+
+  const targetPctInp = document.getElementById('rebal-target-pct');
+  const sellAmtInp = document.getElementById('rebal-sell-amt-input');
+  const sellQtyInp = document.getElementById('rebal-sell-qty-input');
+
+  let targetWeight = parseFloat(targetPctInp?.value);
+  if (isNaN(targetWeight)) targetWeight = 0;
+
+  if (triggeredBy === 'amt') {
+    const amt = parseFloat(sellAmtInp?.value);
+    if (!isNaN(amt) && amt >= 0) {
+      const targetMv = Math.max(0, currentPosMv - amt);
+      targetWeight = totalNetWorth > 0 ? (targetMv / totalNetWorth) * 100 : 0;
+      if (targetPctInp) targetPctInp.value = targetWeight.toFixed(2);
+      if (sellQtyInp) sellQtyInp.value = (amt / simPrice).toFixed(4);
+    }
+  } else if (triggeredBy === 'qty') {
+    const qty = parseFloat(sellQtyInp?.value);
+    if (!isNaN(qty) && qty >= 0) {
+      const amt = qty * simPrice;
+      const targetMv = Math.max(0, currentPosMv - amt);
+      targetWeight = totalNetWorth > 0 ? (targetMv / totalNetWorth) * 100 : 0;
+      if (targetPctInp) targetPctInp.value = targetWeight.toFixed(2);
+      if (sellAmtInp) sellAmtInp.value = amt.toFixed(2);
+    }
+  } else if (triggeredBy === 'pct' || triggeredBy === 'price') {
+    const targetMv = totalNetWorth * (targetWeight / 100);
+    const amtToSell = Math.max(0, currentPosMv - targetMv);
+    const qtyToSell = amtToSell / simPrice;
+    if (sellAmtInp) sellAmtInp.value = amtToSell > 0 ? amtToSell.toFixed(2) : '';
+    if (sellQtyInp) sellQtyInp.value = qtyToSell > 0 ? qtyToSell.toFixed(4) : '';
+  }
+
+  const targetMv = totalNetWorth * (targetWeight / 100);
+  const diffMv = currentPosMv - targetMv;
+  const isSell = diffMv >= 0;
+  const sharesDiff = Math.abs(diffMv) / simPrice;
+
+  let sharesToSell = 0;
+  let remainingShares = 0;
+  let remainingMv = 0;
+  let proceeds = 0;
+  let estRealizedPl = 0;
+  let estRealizedPlPct = 0;
+  let newCash = CASH_BALANCE;
+
+  if (isSell) {
+    sharesToSell = Math.min(pos.shares, sharesDiff);
+    remainingShares = Math.max(0, pos.shares - sharesToSell);
+    remainingMv = remainingShares * simPrice;
+    proceeds = sharesToSell * simPrice;
+    estRealizedPl = sharesToSell * (simPrice - pos.avgCost);
+    estRealizedPlPct = pos.avgCost > 0 ? ((simPrice - pos.avgCost) / pos.avgCost) * 100 : 0;
+    newCash = CASH_BALANCE + proceeds;
+  } else {
+    sharesToSell = 0;
+    remainingShares = pos.shares + sharesDiff;
+    remainingMv = remainingShares * simPrice;
+    proceeds = 0;
+    newCash = Math.max(0, CASH_BALANCE - (sharesDiff * simPrice));
+  }
+
+  currentRebalState = {
+    ticker,
+    simPrice,
+    targetWeight,
+    isSell,
+    sharesToSell,
+    proceeds,
+    remainingShares,
+    remainingMv,
+    estRealizedPl
+  };
+
+  const badgeEl = document.getElementById('rebal-badge');
+  const sellAmtEl = document.getElementById('rebal-sell-amt');
+  const sellSharesEl = document.getElementById('rebal-sell-shares');
+  const remAmtEl = document.getElementById('rebal-rem-amt');
+  const remSharesEl = document.getElementById('rebal-rem-shares');
+  const plAmtEl = document.getElementById('rebal-pl-amt');
+  const cashAmtEl = document.getElementById('rebal-cash-amt');
+
+  if (isSell) {
+    if (badgeEl) {
+      badgeEl.textContent = sharesToSell >= pos.shares - 0.0001 ? 'SELL ALL / CLOSE' : 'SELL / TRIM';
+      badgeEl.style.background = 'rgba(239,68,68,0.2)';
+      badgeEl.style.color = '#fca5a5';
+    }
+    if (sellAmtEl) sellAmtEl.textContent = `${sym}${proceeds.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+    if (sellSharesEl) sellSharesEl.innerHTML = `Sell <b>${fmtShares(sharesToSell)}</b> shares (Target: ${targetWeight.toFixed(2)}%)`;
+    
+    if (plAmtEl) {
+      const plColor = estRealizedPl >= 0 ? 'var(--gain)' : 'var(--loss)';
+      plAmtEl.innerHTML = `<span style="color:${plColor};">${estRealizedPl >= 0 ? '+' : ''}${sym}${Math.abs(estRealizedPl).toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})} (${fmtSign(estRealizedPlPct)}%)</span>`;
+    }
+  } else {
+    if (badgeEl) {
+      badgeEl.textContent = 'BUY / ADD';
+      badgeEl.style.background = 'rgba(34,197,94,0.2)';
+      badgeEl.style.color = '#86efac';
+    }
+    if (sellAmtEl) sellAmtEl.textContent = `+${sym}${Math.abs(diffMv).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+    if (sellSharesEl) sellSharesEl.innerHTML = `Buy <b>${fmtShares(sharesDiff)}</b> shares (Target: ${targetWeight.toFixed(2)}%)`;
+    if (plAmtEl) plAmtEl.innerHTML = `<span style="color:var(--muted); font-size:12px;">(No realized P/L on buy)</span>`;
+  }
+
+  if (remAmtEl) remAmtEl.textContent = `${sym}${remainingMv.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+  if (remSharesEl) remSharesEl.innerHTML = `Remaining: <b>${fmtShares(remainingShares)}</b> shares (${targetWeight.toFixed(2)}% wt)`;
+  if (cashAmtEl) cashAmtEl.innerHTML = `New Cash: <b>${sym}${newCash.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</b> (${((newCash / totalNetWorth) * 100).toFixed(1)}% of port)`;
+}
+
+function quickRebalPreset(type) {
+  const targetPctInp = document.getElementById('rebal-target-pct');
+  if (!targetPctInp) return;
+
+  const ticker = document.getElementById('rebal-ticker')?.value;
+  const pos = PORTFOLIO.find(p => p.ticker === ticker);
+  if (!pos) return;
+
+  const simPrice = parseFloat(document.getElementById('rebal-price')?.value) || priceData[ticker]?.price || pos.avgCost || 0;
+  const stockRows = PORTFOLIO.map(getRow);
+  const totalStockMv = stockRows.reduce((sum, r) => sum + (r.marketValue || r.totalCost || 0), 0);
+  const totalNetWorth = totalStockMv + CASH_BALANCE;
+  const curPosMv = pos.shares * simPrice;
+  const curWeight = totalNetWorth > 0 ? (curPosMv / totalNetWorth) * 100 : 0;
+
+  if (typeof type === 'number') {
+    targetPctInp.value = type.toFixed(2);
+  } else if (type === 'trim2') {
+    targetPctInp.value = Math.max(0, curWeight - 2).toFixed(2);
+  } else if (type === 'trim5') {
+    targetPctInp.value = Math.max(0, curWeight - 5).toFixed(2);
+  } else if (type === 'half') {
+    targetPctInp.value = (curWeight * 0.5).toFixed(2);
+  }
+  runRebalCalc('pct');
+}
+
 </script>
 </body>
 </html>
