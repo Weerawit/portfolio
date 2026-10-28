@@ -4651,7 +4651,7 @@ function openTargetRebalanceCalc(targetTicker) {
   const content = `
     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; flex-wrap:wrap; gap:8px;">
       <div style="font-size:12px; color:var(--muted);">
-        คำนวณการขายลดสัดส่วนหุ้นให้อยู่ใน % Holding เป้าหมาย พร้อมบันทึกรายการขายได้ทันที
+        คำนวณจำลองการขายลดสัดส่วนหุ้นให้อยู่ใน % Holding เป้าหมาย (Plan & Simulation)
       </div>
       <button type="button" class="btn" onclick="openAvgCalculator(document.getElementById('rebal-ticker')?.value)" style="padding:3px 8px; font-size:11px; border-color:var(--accent); color:var(--accent);">∑ DCA Calculator</button>
     </div>
@@ -4744,8 +4744,7 @@ function openTargetRebalanceCalc(targetTicker) {
     title: '⚖️ Target % Holding & Rebalance Calculator',
     message: content,
     buttons: [
-      { text: '⚡ Execute Sell (บันทึกรายการขาย)', primary: true, onClick: () => executeRebalanceSell() },
-      { text: 'Close', onClick: () => {} }
+      { text: 'Close', primary: true, onClick: () => {} }
     ]
   });
 
@@ -4958,47 +4957,6 @@ function quickRebalPreset(type) {
   runRebalCalc('pct');
 }
 
-async function executeRebalanceSell() {
-  if (!currentRebalState) return;
-  const { ticker, simPrice, targetWeight, isSell, sharesToSell, proceeds, estRealizedPl } = currentRebalState;
-  
-  if (!isSell || sharesToSell <= 0) {
-    showAlert("Please specify a target % holding lower than your current weight to sell/trim shares.");
-    return;
-  }
-
-  const sym = getCurrencySymbol();
-  const confirmed = await showConfirm(
-    `Confirm Rebalance Sell:\n\n` +
-    `• Stock: ${ticker}\n` +
-    `• Sell Shares: ${fmtShares(sharesToSell)} shares\n` +
-    `• Execution Price: ${sym}${simPrice.toFixed(2)}\n` +
-    `• Total Proceeds: ${sym}${proceeds.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}\n` +
-    `• Target Holding Weight: ${targetWeight.toFixed(2)}%\n` +
-    `• Est. Realized P/L: ${estRealizedPl >= 0 ? '+' : ''}${sym}${estRealizedPl.toFixed(2)}\n\n` +
-    `บันทึกรายการขายนี้เข้าสู่พอร์ตทันทีหรือไม่?`
-  );
-
-  if (!confirmed) return;
-
-  const today = new Date().toISOString().slice(0, 10);
-  transactions.push({
-    date: today,
-    ticker: ticker,
-    action: 'sell',
-    shares: parseFloat(sharesToSell.toFixed(4)),
-    price: parseFloat(simPrice.toFixed(4)),
-    note: `Target % Rebalance to ${targetWeight.toFixed(1)}%`
-  });
-
-  saveTransactions();
-  refreshPortfolio();
-
-  const backdrop = document.getElementById('modal-backdrop');
-  if (backdrop) backdrop.classList.remove('active');
-
-  showAlert(`🎉 ขาย ${ticker} จำนวน ${fmtShares(sharesToSell)} หุ้นเรียบร้อย! ปรับสัดส่วนพอร์ตเป็น ${targetWeight.toFixed(2)}% สำเร็จ`);
-}
 </script>
 </body>
 </html>
