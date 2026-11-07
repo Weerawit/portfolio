@@ -4285,7 +4285,7 @@ function openAvgCalculator(targetTicker) {
           <th style="min-width: 110px; text-align: left;">Sim Amount (${sym})</th>
           <th style="min-width: 90px; text-align: left;">Sim Qty</th>
           <th style="min-width: 125px; text-align: right;">New Avg (Diff)</th>
-          <th style="min-width: 75px; text-align: right;">New Wght</th>
+          <th style="min-width: 95px; text-align: right;" title="สัดส่วนในพอร์ตหุ้น (และในวงเล็บ NW คือสัดส่วนเทียบกับ Net Worth รวมเงินสด)">New Wght</th>
           <th class="col-action"></th>
         </tr>
       </thead>
@@ -4336,8 +4336,10 @@ function updateCalcBase(isTickerChange) {
   
   const rows = PORTFOLIO.map(getRow);
   const totalMv = rows.reduce((sum, r) => sum + (r.marketValue || 0), 0);
+  const totalNetWorth = totalMv + CASH_BALANCE;
   const currentMv = currentPrice * pos.shares;
   const currentWeight = totalMv > 0 ? (currentMv / totalMv) * 100 : 0;
+  const currentNwWeight = totalNetWorth > 0 ? (currentMv / totalNetWorth) * 100 : 0;
   
   const isThb = getActiveCurrency() === 'THB';
   const sym = getCurrencySymbol();
@@ -4346,11 +4348,14 @@ function updateCalcBase(isTickerChange) {
     : `≈ ฿${Math.round(pos.totalCost * usdThbRate).toLocaleString('en-US')}`;
   
   const marketPriceStr = currentPrice ? `${sym}${currentPrice.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}` : 'N/A';
+  const weightStr = CASH_BALANCE > 0
+    ? `Weight: <b>${currentWeight.toFixed(2)}%</b> <span style="color:var(--muted); font-size:11px;" title="สัดส่วนเทียบกับ Net Worth รวมเงินสด">(${currentNwWeight.toFixed(2)}% NW)</span>`
+    : `Weight: <b>${currentWeight.toFixed(2)}%</b>`;
 
   const baseInfoEl = document.getElementById('calc-base-info');
   if (baseInfoEl) {
     baseInfoEl.innerHTML = 
-      `Current: <b>${fmtShares(pos.shares)}</b> shares @ <b>${sym}${pos.avgCost.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</b> (Total: ${sym}${pos.totalCost.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})} <span style="color:var(--muted); font-size:11px;">${altTotal}</span>, Weight: <b>${currentWeight.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}%</b>, Mkt Price: <b>${marketPriceStr}</b>)`;
+      `Current: <b>${fmtShares(pos.shares)}</b> shares @ <b>${sym}${pos.avgCost.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</b> (Total: ${sym}${pos.totalCost.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})} <span style="color:var(--muted); font-size:11px;">${altTotal}</span>, ${weightStr}, Mkt Price: <b>${marketPriceStr}</b>)`;
   }
   
   runAvgCalc();
@@ -4478,13 +4483,17 @@ function runAvgCalc(triggeredBy, rowIdx) {
           const newAvgVal = cumCost / cumShares;
           const newMv = cumShares * currentTickerPrice;
           const newWeight = cumTotalMv > 0 ? (newMv / cumTotalMv) * 100 : 0;
+          const totalNetWorth = totalMv + CASH_BALANCE;
+          const newNwWeight = totalNetWorth > 0 ? (newMv / totalNetWorth) * 100 : 0;
 
           const diffPct = baseAvg > 0 ? ((newAvgVal - baseAvg) / baseAvg) * 100 : 0;
           const diffSign = diffPct > 0 ? '+' : '';
           const diffColor = diffPct < 0 ? 'var(--gain)' : (diffPct > 0 ? 'var(--loss)' : 'var(--muted)');
 
           resAvg.innerHTML = `${sym}${newAvgVal.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})} <span style="font-size:10px; font-weight:normal; color:${diffColor};">(${diffSign}${diffPct.toFixed(1)}%)</span>`;
-          resW.textContent = newWeight.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2}) + '%';
+          resW.innerHTML = CASH_BALANCE > 0
+            ? `${newWeight.toFixed(2)}% <span style="font-size:10px; font-weight:normal; color:var(--muted);" title="สัดส่วนเทียบกับ Net Worth รวมเงินสด">${newNwWeight.toFixed(1)}% NW</span>`
+            : `${newWeight.toFixed(2)}%`;
         } else {
           // Sell off
           if (cumShares - qVal < 0) {
@@ -4499,9 +4508,13 @@ function runAvgCalc(triggeredBy, rowIdx) {
 
             const newMv = cumShares * currentTickerPrice;
             const newWeight = cumTotalMv > 0 ? (newMv / cumTotalMv) * 100 : 0;
+            const totalNetWorth = totalMv + CASH_BALANCE;
+            const newNwWeight = totalNetWorth > 0 ? (newMv / totalNetWorth) * 100 : 0;
 
             resAvg.innerHTML = `${sym}${baseAvg.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
-            resW.textContent = newWeight.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2}) + '%';
+            resW.innerHTML = CASH_BALANCE > 0
+              ? `${newWeight.toFixed(2)}% <span style="font-size:10px; font-weight:normal; color:var(--muted);" title="สัดส่วนเทียบกับ Net Worth รวมเงินสด">${newNwWeight.toFixed(1)}% NW</span>`
+              : `${newWeight.toFixed(2)}%`;
           }
         }
       } else {
@@ -4524,6 +4537,11 @@ function runAvgCalc(triggeredBy, rowIdx) {
         const finalDiffColor = finalDiffPct < 0 ? 'var(--gain)' : (finalDiffPct > 0 ? 'var(--loss)' : 'var(--text)');
         const finalMv = cumShares * currentTickerPrice;
         const finalWeight = cumTotalMv > 0 ? (finalMv / cumTotalMv) * 100 : 0;
+        const totalNetWorth = totalMv + CASH_BALANCE;
+        const finalNwWeight = totalNetWorth > 0 ? (finalMv / totalNetWorth) * 100 : 0;
+        const nwSummary = CASH_BALANCE > 0 
+          ? ` <span style="font-size:11px; font-weight:normal; color:var(--muted);" title="สัดส่วนเทียบกับ Net Worth รวมเงินสด">(≈ ${finalNwWeight.toFixed(2)}% Net Worth)</span>`
+          : '';
 
         summaryEl.innerHTML = `
           <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px;">
@@ -4541,7 +4559,7 @@ function runAvgCalc(triggeredBy, rowIdx) {
             </div>
             <div>
               <div style="font-size:10px; color:var(--muted); text-transform:uppercase; letter-spacing:0.5px;">Final Portfolio Weight</div>
-              <div style="font-size:14px; font-weight:700; color:var(--text);">${finalWeight.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}%</div>
+              <div style="font-size:14px; font-weight:700; color:var(--text);">${finalWeight.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}%${nwSummary}</div>
             </div>
           </div>
         `;
@@ -4574,13 +4592,17 @@ function runAvgCalc(triggeredBy, rowIdx) {
           const newMv = newShares * currentTickerPrice;
           const newTotalMv = totalMv + (qVal * currentTickerPrice);
           const newWeight = newTotalMv > 0 ? (newMv / newTotalMv) * 100 : 0;
+          const totalNetWorth = totalMv + CASH_BALANCE;
+          const newNwWeight = totalNetWorth > 0 ? (newMv / totalNetWorth) * 100 : 0;
 
           const diffPct = baseAvg > 0 ? ((newAvgVal - baseAvg) / baseAvg) * 100 : 0;
           const diffSign = diffPct > 0 ? '+' : '';
           const diffColor = diffPct < 0 ? 'var(--gain)' : (diffPct > 0 ? 'var(--loss)' : 'var(--muted)');
 
           resAvg.innerHTML = `${sym}${newAvgVal.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})} <span style="font-size:10px; font-weight:normal; color:${diffColor};">(${diffSign}${diffPct.toFixed(1)}%)</span>`;
-          resW.textContent = newWeight.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2}) + '%';
+          resW.innerHTML = CASH_BALANCE > 0
+            ? `${newWeight.toFixed(2)}% <span style="font-size:10px; font-weight:normal; color:var(--muted);" title="เทียบกับ Net Worth รวมเงินสด">${newNwWeight.toFixed(1)}% NW</span>`
+            : `${newWeight.toFixed(2)}%`;
         } else {
           // Sell off
           const newShares = baseShares - qVal;
@@ -4591,9 +4613,13 @@ function runAvgCalc(triggeredBy, rowIdx) {
             const newMv = newShares * currentTickerPrice;
             const newTotalMv = totalMv - (qVal * currentTickerPrice);
             const newWeight = newTotalMv > 0 ? (newMv / newTotalMv) * 100 : 0;
+            const totalNetWorth = totalMv + CASH_BALANCE;
+            const newNwWeight = totalNetWorth > 0 ? (newMv / totalNetWorth) * 100 : 0;
 
             resAvg.innerHTML = `${sym}${baseAvg.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
-            resW.textContent = newWeight.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2}) + '%';
+            resW.innerHTML = CASH_BALANCE > 0
+              ? `${newWeight.toFixed(2)}% <span style="font-size:10px; font-weight:normal; color:var(--muted);" title="เทียบกับ Net Worth รวมเงินสด">${newNwWeight.toFixed(1)}% NW</span>`
+              : `${newWeight.toFixed(2)}%`;
           }
         }
       } else {
@@ -4651,7 +4677,7 @@ function openTargetRebalanceCalc(targetTicker) {
   const content = `
     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; flex-wrap:wrap; gap:8px;">
       <div style="font-size:12px; color:var(--muted);">
-        คำนวณจำลองการขายลดสัดส่วนหุ้นให้อยู่ใน % Holding เป้าหมาย (Plan & Simulation)
+        คำนวณจำลองการปรับสัดส่วนหุ้น (ซื้อเพิ่ม / ขายลด) ให้อยู่ใน % Holding เป้าหมายของ Net Worth (Plan & Simulation)
       </div>
       <button type="button" class="btn" onclick="openAvgCalculator(document.getElementById('rebal-ticker')?.value)" style="padding:3px 8px; font-size:11px; border-color:var(--accent); color:var(--accent);">∑ DCA Calculator</button>
     </div>
@@ -4679,12 +4705,14 @@ function openTargetRebalanceCalc(targetTicker) {
         <label class="calc-row-label" style="margin:0; font-weight:600; color:var(--text);">Target % Holding of Portfolio</label>
         <div style="display:flex; gap:5px; flex-wrap:wrap;">
           <button type="button" class="calc-preset-btn" onclick="quickRebalPreset(0)" style="color:var(--loss);">Sell All (0%)</button>
+          <button type="button" class="calc-preset-btn" onclick="quickRebalPreset('trim2')">-2% Trim</button>
+          <button type="button" class="calc-preset-btn" onclick="quickRebalPreset('trim5')">-5% Trim</button>
+          <button type="button" class="calc-preset-btn" onclick="quickRebalPreset('add2')" style="color:var(--gain);">+2% Add</button>
+          <button type="button" class="calc-preset-btn" onclick="quickRebalPreset('add5')" style="color:var(--gain);">+5% Add</button>
           <button type="button" class="calc-preset-btn" onclick="quickRebalPreset(3)">3%</button>
           <button type="button" class="calc-preset-btn" onclick="quickRebalPreset(5)">5%</button>
           <button type="button" class="calc-preset-btn" onclick="quickRebalPreset(10)">10%</button>
           <button type="button" class="calc-preset-btn" onclick="quickRebalPreset(15)">15%</button>
-          <button type="button" class="calc-preset-btn" onclick="quickRebalPreset('trim2')">-2% Trim</button>
-          <button type="button" class="calc-preset-btn" onclick="quickRebalPreset('trim5')">-5% Trim</button>
           <button type="button" class="calc-preset-btn" onclick="quickRebalPreset('half')">Half (50%)</button>
         </div>
       </div>
@@ -4695,18 +4723,18 @@ function openTargetRebalanceCalc(targetTicker) {
           <span style="position:absolute; right:10px; top:50%; transform:translateY(-50%); color:var(--muted); font-size:13px; font-weight:700;">%</span>
         </div>
         <div style="font-size:11px; color:var(--muted); flex:2; min-width:200px;">
-          พิมพ์ระบุเป้าหมาย % หรือคลิกปุ่มลัดด้านบน ระบบจะคำนวณจำนวนหุ้นและยอดเงินที่ต้องขายให้อัตโนมัติ
+          พิมพ์ระบุเป้าหมาย % หรือคลิกปุ่มลัดด้านบน ระบบจะคำนวณจำนวนหุ้นและยอดเงินที่ต้องซื้อเพิ่มหรือขายลดให้อัตโนมัติ
         </div>
       </div>
 
       <!-- Secondary Bidirectional Inputs -->
       <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:12px; padding-top:10px; border-top:1px dashed var(--border);">
         <div>
-          <label style="font-size:10.5px; color:var(--muted); display:block; margin-bottom:3px;">หรือระบุยอดเงินที่ต้องการขาย (${sym}):</label>
+          <label id="rebal-sec-amt-label" style="font-size:10.5px; color:var(--muted); display:block; margin-bottom:3px;">หรือระบุยอดเงินที่ต้องการขาย (${sym}):</label>
           <input type="number" step="any" min="0" id="rebal-sell-amt-input" class="calc-input" placeholder="Amount ${sym}" oninput="runRebalCalc('amt')">
         </div>
         <div>
-          <label style="font-size:10.5px; color:var(--muted); display:block; margin-bottom:3px;">หรือระบุจำนวนหุ้นที่ต้องการขาย (Shares):</label>
+          <label id="rebal-sec-qty-label" style="font-size:10.5px; color:var(--muted); display:block; margin-bottom:3px;">หรือระบุจำนวนหุ้นที่ต้องการขาย (Shares):</label>
           <input type="number" step="any" min="0" id="rebal-sell-qty-input" class="calc-input" placeholder="Quantity" oninput="runRebalCalc('qty')">
         </div>
       </div>
@@ -4714,10 +4742,10 @@ function openTargetRebalanceCalc(targetTicker) {
 
     <!-- Rebalance Calculation Output Cards -->
     <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(210px, 1fr)); gap:10px; margin-bottom:14px;">
-      <!-- Card 1: To Sell -->
-      <div style="background:rgba(239,68,68,0.06); border:1px solid rgba(239,68,68,0.25); border-radius:8px; padding:12px;">
+      <!-- Card 1: Action (Buy/Sell) -->
+      <div id="rebal-action-card" style="background:rgba(239,68,68,0.06); border:1px solid rgba(239,68,68,0.25); border-radius:8px; padding:12px; transition:all 0.2s ease;">
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
-          <span style="font-size:10px; text-transform:uppercase; letter-spacing:0.7px; color:#f87171; font-weight:600;">🔻 Action / To Sell</span>
+          <span id="rebal-action-title" style="font-size:10px; text-transform:uppercase; letter-spacing:0.7px; color:#f87171; font-weight:600;">🔻 Action / To Sell</span>
           <span id="rebal-badge" style="font-size:9.5px; padding:2px 6px; border-radius:4px; font-weight:700; background:rgba(239,68,68,0.2); color:#fca5a5;">SELL</span>
         </div>
         <div id="rebal-sell-amt" style="font-size:18px; font-weight:700; color:#f87171; margin-bottom:2px;">—</div>
@@ -4726,14 +4754,14 @@ function openTargetRebalanceCalc(targetTicker) {
 
       <!-- Card 2: Remaining Position -->
       <div style="background:var(--bg2); border:1px solid var(--border); border-radius:8px; padding:12px;">
-        <div style="font-size:10px; text-transform:uppercase; letter-spacing:0.7px; color:var(--muted); font-weight:600; margin-bottom:6px;">📦 Remaining Position</div>
+        <div id="rebal-pos-title" style="font-size:10px; text-transform:uppercase; letter-spacing:0.7px; color:var(--muted); font-weight:600; margin-bottom:6px;">📦 Target Position</div>
         <div id="rebal-rem-amt" style="font-size:18px; font-weight:700; color:var(--text); margin-bottom:2px;">—</div>
         <div id="rebal-rem-shares" style="font-size:12px; color:var(--muted);">—</div>
       </div>
 
       <!-- Card 3: Impact & P/L -->
       <div style="background:var(--bg2); border:1px solid var(--border); border-radius:8px; padding:12px;">
-        <div style="font-size:10px; text-transform:uppercase; letter-spacing:0.7px; color:var(--muted); font-weight:600; margin-bottom:6px;">💰 Estimated P/L & Cash</div>
+        <div id="rebal-impact-title" style="font-size:10px; text-transform:uppercase; letter-spacing:0.7px; color:var(--muted); font-weight:600; margin-bottom:6px;">💰 Estimated P/L & Cash</div>
         <div id="rebal-pl-amt" style="font-size:16px; font-weight:700; margin-bottom:2px;">—</div>
         <div id="rebal-cash-amt" style="font-size:11px; color:var(--muted);">—</div>
       </div>
@@ -4830,7 +4858,8 @@ function runRebalCalc(triggeredBy) {
   if (triggeredBy === 'amt') {
     const amt = parseFloat(sellAmtInp?.value);
     if (!isNaN(amt) && amt >= 0) {
-      const targetMv = Math.max(0, currentPosMv - amt);
+      const isCurrentlyBuy = currentRebalState && !currentRebalState.isSell;
+      const targetMv = isCurrentlyBuy ? (currentPosMv + amt) : Math.max(0, currentPosMv - amt);
       targetWeight = totalNetWorth > 0 ? (targetMv / totalNetWorth) * 100 : 0;
       if (targetPctInp) targetPctInp.value = targetWeight.toFixed(2);
       if (sellQtyInp) sellQtyInp.value = (amt / simPrice).toFixed(4);
@@ -4839,33 +4868,39 @@ function runRebalCalc(triggeredBy) {
     const qty = parseFloat(sellQtyInp?.value);
     if (!isNaN(qty) && qty >= 0) {
       const amt = qty * simPrice;
-      const targetMv = Math.max(0, currentPosMv - amt);
+      const isCurrentlyBuy = currentRebalState && !currentRebalState.isSell;
+      const targetMv = isCurrentlyBuy ? (currentPosMv + amt) : Math.max(0, currentPosMv - amt);
       targetWeight = totalNetWorth > 0 ? (targetMv / totalNetWorth) * 100 : 0;
       if (targetPctInp) targetPctInp.value = targetWeight.toFixed(2);
       if (sellAmtInp) sellAmtInp.value = amt.toFixed(2);
     }
   } else if (triggeredBy === 'pct' || triggeredBy === 'price') {
     const targetMv = totalNetWorth * (targetWeight / 100);
-    const amtToSell = Math.max(0, currentPosMv - targetMv);
-    const qtyToSell = amtToSell / simPrice;
-    if (sellAmtInp) sellAmtInp.value = amtToSell > 0 ? amtToSell.toFixed(2) : '';
-    if (sellQtyInp) sellQtyInp.value = qtyToSell > 0 ? qtyToSell.toFixed(4) : '';
+    const amtDiff = Math.abs(currentPosMv - targetMv);
+    const qtyDiff = amtDiff / simPrice;
+    if (sellAmtInp) sellAmtInp.value = amtDiff > 0.005 ? amtDiff.toFixed(2) : '';
+    if (sellQtyInp) sellQtyInp.value = qtyDiff > 0.0001 ? qtyDiff.toFixed(4) : '';
   }
 
   const targetMv = totalNetWorth * (targetWeight / 100);
   const diffMv = currentPosMv - targetMv;
-  const isSell = diffMv >= 0;
+  const isNeutral = Math.abs(diffMv) < 0.01;
+  const isSell = diffMv > 0.005;
   const sharesDiff = Math.abs(diffMv) / simPrice;
 
   let sharesToSell = 0;
   let remainingShares = 0;
   let remainingMv = 0;
   let proceeds = 0;
+  let buyCost = 0;
   let estRealizedPl = 0;
   let estRealizedPlPct = 0;
   let newCash = CASH_BALANCE;
 
-  if (isSell) {
+  if (isNeutral) {
+    remainingShares = pos.shares;
+    remainingMv = remainingShares * simPrice;
+  } else if (isSell) {
     sharesToSell = Math.min(pos.shares, sharesDiff);
     remainingShares = Math.max(0, pos.shares - sharesToSell);
     remainingMv = remainingShares * simPrice;
@@ -4874,18 +4909,20 @@ function runRebalCalc(triggeredBy) {
     estRealizedPlPct = pos.avgCost > 0 ? ((simPrice - pos.avgCost) / pos.avgCost) * 100 : 0;
     newCash = CASH_BALANCE + proceeds;
   } else {
+    // Buy / Add
     sharesToSell = 0;
     remainingShares = pos.shares + sharesDiff;
     remainingMv = remainingShares * simPrice;
+    buyCost = sharesDiff * simPrice;
     proceeds = 0;
-    newCash = Math.max(0, CASH_BALANCE - (sharesDiff * simPrice));
+    newCash = Math.max(0, CASH_BALANCE - buyCost);
   }
 
   currentRebalState = {
     ticker,
     simPrice,
     targetWeight,
-    isSell,
+    isSell: isNeutral ? null : isSell,
     sharesToSell,
     proceeds,
     remainingShares,
@@ -4893,41 +4930,115 @@ function runRebalCalc(triggeredBy) {
     estRealizedPl
   };
 
+  const actionCard = document.getElementById('rebal-action-card');
+  const actionTitle = document.getElementById('rebal-action-title');
   const badgeEl = document.getElementById('rebal-badge');
   const sellAmtEl = document.getElementById('rebal-sell-amt');
   const sellSharesEl = document.getElementById('rebal-sell-shares');
+  const posTitle = document.getElementById('rebal-pos-title');
   const remAmtEl = document.getElementById('rebal-rem-amt');
   const remSharesEl = document.getElementById('rebal-rem-shares');
+  const impactTitle = document.getElementById('rebal-impact-title');
   const plAmtEl = document.getElementById('rebal-pl-amt');
   const cashAmtEl = document.getElementById('rebal-cash-amt');
+  const secAmtLabel = document.getElementById('rebal-sec-amt-label');
+  const secQtyLabel = document.getElementById('rebal-sec-qty-label');
 
-  if (isSell) {
+  if (secAmtLabel) {
+    secAmtLabel.textContent = isSell ? `หรือระบุยอดเงินที่ต้องการขาย (${sym}):` : `หรือระบุยอดเงินที่ต้องการซื้อเพิ่ม (${sym}):`;
+  }
+  if (secQtyLabel) {
+    secQtyLabel.textContent = isSell ? `หรือระบุจำนวนหุ้นที่ต้องการขาย (Shares):` : `หรือระบุจำนวนหุ้นที่ต้องการซื้อเพิ่ม (Shares):`;
+  }
+
+  if (isNeutral) {
+    if (actionCard) {
+      actionCard.style.background = 'var(--bg2)';
+      actionCard.style.borderColor = 'var(--border)';
+    }
+    if (actionTitle) {
+      actionTitle.innerHTML = '⚖️ Action / Balanced';
+      actionTitle.style.color = 'var(--muted)';
+    }
+    if (badgeEl) {
+      badgeEl.textContent = 'TARGET MET';
+      badgeEl.style.background = 'rgba(255,255,255,0.08)';
+      badgeEl.style.color = 'var(--muted)';
+    }
+    if (sellAmtEl) {
+      sellAmtEl.textContent = `${sym}0.00`;
+      sellAmtEl.style.color = 'var(--text)';
+    }
+    if (sellSharesEl) sellSharesEl.innerHTML = `Already at target weight (<b>${targetWeight.toFixed(2)}%</b>)`;
+    if (posTitle) posTitle.textContent = '📦 Current Position';
+    if (impactTitle) impactTitle.textContent = '💰 Portfolio Impact';
+    if (plAmtEl) plAmtEl.innerHTML = `<span style="color:var(--muted); font-size:12px;">(No rebalance required)</span>`;
+    if (cashAmtEl) cashAmtEl.innerHTML = `Current Cash: <b>${sym}${CASH_BALANCE.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})}</b>`;
+  } else if (isSell) {
+    if (actionCard) {
+      actionCard.style.background = 'rgba(239,68,68,0.06)';
+      actionCard.style.borderColor = 'rgba(239,68,68,0.25)';
+    }
+    if (actionTitle) {
+      actionTitle.innerHTML = '🔻 Action / To Sell (Trim)';
+      actionTitle.style.color = '#f87171';
+    }
     if (badgeEl) {
       badgeEl.textContent = sharesToSell >= pos.shares - 0.0001 ? 'SELL ALL / CLOSE' : 'SELL / TRIM';
       badgeEl.style.background = 'rgba(239,68,68,0.2)';
       badgeEl.style.color = '#fca5a5';
     }
-    if (sellAmtEl) sellAmtEl.textContent = `${sym}${proceeds.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+    if (sellAmtEl) {
+      sellAmtEl.textContent = `${sym}${proceeds.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+      sellAmtEl.style.color = '#f87171';
+    }
     if (sellSharesEl) sellSharesEl.innerHTML = `Sell <b>${fmtShares(sharesToSell)}</b> shares (Target: ${targetWeight.toFixed(2)}%)`;
-    
+    if (posTitle) posTitle.textContent = '📦 Remaining Position';
+    if (impactTitle) impactTitle.textContent = '💰 Estimated Realized P/L';
     if (plAmtEl) {
       const plColor = estRealizedPl >= 0 ? 'var(--gain)' : 'var(--loss)';
       plAmtEl.innerHTML = `<span style="color:${plColor};">${estRealizedPl >= 0 ? '+' : ''}${sym}${Math.abs(estRealizedPl).toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})} (${fmtSign(estRealizedPlPct)}%)</span>`;
     }
+    if (cashAmtEl) cashAmtEl.innerHTML = `New Cash: <b>${sym}${newCash.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</b> (+${sym}${proceeds.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})})`;
   } else {
+    // BUY / ADD
+    if (actionCard) {
+      actionCard.style.background = 'rgba(34,197,94,0.08)';
+      actionCard.style.borderColor = 'rgba(34,197,94,0.3)';
+    }
+    if (actionTitle) {
+      actionTitle.innerHTML = '🔺 Action / To Buy (Add)';
+      actionTitle.style.color = '#22c55e';
+    }
     if (badgeEl) {
       badgeEl.textContent = 'BUY / ADD';
       badgeEl.style.background = 'rgba(34,197,94,0.2)';
-      badgeEl.style.color = '#86efac';
+      badgeEl.style.color = '#22c55e';
     }
-    if (sellAmtEl) sellAmtEl.textContent = `+${sym}${Math.abs(diffMv).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+    if (sellAmtEl) {
+      sellAmtEl.textContent = `+${sym}${buyCost.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+      sellAmtEl.style.color = '#22c55e';
+    }
     if (sellSharesEl) sellSharesEl.innerHTML = `Buy <b>${fmtShares(sharesDiff)}</b> shares (Target: ${targetWeight.toFixed(2)}%)`;
-    if (plAmtEl) plAmtEl.innerHTML = `<span style="color:var(--muted); font-size:12px;">(No realized P/L on buy)</span>`;
+    if (posTitle) posTitle.textContent = '📦 Projected Position';
+    if (impactTitle) impactTitle.textContent = '💰 Cash Required & Impact';
+    
+    const cashExceeded = buyCost > CASH_BALANCE;
+    const cashDiff = buyCost - CASH_BALANCE;
+    if (plAmtEl) {
+      plAmtEl.innerHTML = `<span style="color:var(--text); font-size:14px;">Cost: <b>${sym}${buyCost.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})}</b></span>`;
+    }
+    if (cashAmtEl) {
+      if (cashExceeded) {
+        cashAmtEl.innerHTML = `Remaining Cash: <b>${sym}${newCash.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</b> <span style="color:var(--loss); font-weight:600;">(Need +${sym}${cashDiff.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})} more cash)</span>`;
+      } else {
+        cashAmtEl.innerHTML = `Remaining Cash: <b>${sym}${newCash.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</b> (${((newCash / totalNetWorth) * 100).toFixed(1)}% of port)`;
+      }
+    }
   }
 
   if (remAmtEl) remAmtEl.textContent = `${sym}${remainingMv.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
-  if (remSharesEl) remSharesEl.innerHTML = `Remaining: <b>${fmtShares(remainingShares)}</b> shares (${targetWeight.toFixed(2)}% wt)`;
-  if (cashAmtEl) cashAmtEl.innerHTML = `New Cash: <b>${sym}${newCash.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</b> (${((newCash / totalNetWorth) * 100).toFixed(1)}% of port)`;
+  if (remSharesEl) remSharesEl.innerHTML = `Total: <b>${fmtShares(remainingShares)}</b> shares (${targetWeight.toFixed(2)}% wt)`;
 }
 
 function quickRebalPreset(type) {
@@ -4951,6 +5062,10 @@ function quickRebalPreset(type) {
     targetPctInp.value = Math.max(0, curWeight - 2).toFixed(2);
   } else if (type === 'trim5') {
     targetPctInp.value = Math.max(0, curWeight - 5).toFixed(2);
+  } else if (type === 'add2') {
+    targetPctInp.value = (curWeight + 2).toFixed(2);
+  } else if (type === 'add5') {
+    targetPctInp.value = (curWeight + 5).toFixed(2);
   } else if (type === 'half') {
     targetPctInp.value = (curWeight * 0.5).toFixed(2);
   }
