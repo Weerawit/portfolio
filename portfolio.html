@@ -1250,7 +1250,7 @@
             <th onclick="sortTable('shares')" data-col="shares">Shares</th>
             <th onclick="sortTable('avgCost')" data-col="avgCost">Avg Cost</th>
             <th onclick="sortTable('totalCost')" data-col="totalCost">Total Cost</th>
-            <th onclick="sortTable('portfolioPct')" data-col="portfolioPct">Weight %</th>
+            <th onclick="sortTable('portfolioPct')" data-col="portfolioPct" title="สัดส่วนเทียบกับมูลค่าพอร์ตรวม Net Worth (รวมเงินสด)">Weight %</th>
             <th onclick="sortTable('price')" data-col="price">Price</th>
             <th onclick="sortTable('changePct')" data-col="changePct">Change %</th>
             <th onclick="sortTable('marketValue')" data-col="marketValue">Mkt Value</th>
@@ -3463,8 +3463,10 @@ function renderTable() {
   const altCurr = getAltCurrency();
   const rows = PORTFOLIO.map(getRow);
   const totalMv = rows.reduce((sum, row) => sum + (row.marketValue || 0), 0);
+  const totalNetWorth = totalMv + CASH_BALANCE;
   rows.forEach(row => {
-    row.portfolioPct = row.marketValue !== null && totalMv > 0 ? (row.marketValue / totalMv) * 100 : null;
+    row.portfolioPct = row.marketValue !== null && totalNetWorth > 0 ? (row.marketValue / totalNetWorth) * 100 : null;
+    row.stockPct = row.marketValue !== null && totalMv > 0 ? (row.marketValue / totalMv) * 100 : null;
   });
   rows.sort((a, b) => {
     let av = a[sortCol], bv = b[sortCol];
@@ -3484,6 +3486,9 @@ function renderTable() {
     const gainDStr = r.gainD !== null ? `<span class="${colorClass(r.gainD)}">${r.gainD >= 0?'+':''}${sym}${Math.abs(r.gainD).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})}</span>` : '—';
     const gainPctStr = r.gainPct !== null ? `<span class="${colorClass(r.gainPct)}">${fmtSign(r.gainPct)}%</span>` : '—';
     const dayStr = r.changeD !== null ? `<span class="${colorClass(r.changeD)}">${r.changeD >= 0?'+':''}${sym}${Math.abs(r.changeD).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})}</span>` : '—';
+    const weightTitle = r.portfolioPct !== null
+      ? `Current Weight: ${r.portfolioPct.toFixed(2)}% of Net Worth${CASH_BALANCE > 0 && r.stockPct !== null ? ` (${r.stockPct.toFixed(2)}% of Stocks)` : ''} · Click to calculate rebalance to target %`
+      : 'Click to calculate rebalance';
     return `<tr data-ticker="${r.ticker}" onclick="setTxnFilter('${r.ticker}')" ondblclick="openAvgCalculator('${r.ticker}')" class="${txnFilter === r.ticker ? 'selected-row' : ''}">
       <td><div class="ticker-cell"><span class="tick-badge" 
         onmouseenter="showTickerChart('${r.ticker}', event)" 
@@ -3492,7 +3497,7 @@ function renderTable() {
       <td>${fmtShares(r.shares)}</td>
       <td class="money-val" title="Click to view in ${altCurr}" onclick="event.stopPropagation(); showMoneyPopover(${r.avgCost}, event, '${r.ticker} Avg Cost')">${sym}${r.avgCost.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})}</td>
       <td class="money-val" title="Click to view in ${altCurr}" onclick="event.stopPropagation(); showMoneyPopover(${r.totalCost}, event, '${r.ticker} Total Cost')">${sym}${r.totalCost.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})}</td>
-      <td class="money-val" title="Current Weight: ${r.portfolioPct !== null ? r.portfolioPct.toFixed(2) : 0}% · Click to calculate sell/trim to target %" onclick="event.stopPropagation(); openTargetRebalanceCalc('${r.ticker}')" style="cursor:pointer;">${r.portfolioPct !== null ? `${r.portfolioPct.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}%` : '—'} <span style="font-size:10px; opacity:0.45; margin-left:2px;" title="Target % Sell Calculator">⚖️</span></td>
+      <td class="money-val" title="${weightTitle}" onclick="event.stopPropagation(); openTargetRebalanceCalc('${r.ticker}')" style="cursor:pointer;">${r.portfolioPct !== null ? `${r.portfolioPct.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}%` : '—'} <span style="font-size:10px; opacity:0.45; margin-left:2px;" title="Target % Rebalance Calculator">⚖️</span></td>
       <td class="money-val" title="Click to view in ${altCurr} · Click ✏️ to edit" onclick="event.stopPropagation(); showMoneyPopover(${r.price !== undefined ? r.price : 0}, event, '${r.ticker} Price')">
         ${priceStr}
         <span onclick="event.stopPropagation(); promptEditPrice('${r.ticker}', ${r.price || 0})" title="Edit price manually" style="cursor:pointer; opacity:0.4; font-size:10px; margin-left:4px; padding:2px;">✏️</span>
@@ -3512,15 +3517,23 @@ function renderFooter(rows) {
   const totalShares = rows.reduce((s,r) => s + (Number(r.shares) || 0), 0);
   const totalCost = rows.reduce((s,r) => s + r.totalCost, 0);
   const totalMV = rows.reduce((s,r) => s + (r.marketValue || r.totalCost), 0);
+  const totalNetWorth = totalMV + CASH_BALANCE;
   const totalGainD = totalMV - totalCost;
   const totalGainPct = totalCost ? (totalGainD / totalCost) * 100 : 0;
   const totalDayChange = rows.reduce((s,r) => s + (r.changeD || 0), 0);
   const totalDayPct = totalMV - totalDayChange ? (totalDayChange / (totalMV - totalDayChange)) * 100 : 0;
+  
+  const totalStockPct = totalNetWorth > 0 ? (totalMV / totalNetWorth) * 100 : 0;
+  const cashPct = totalNetWorth > 0 ? (CASH_BALANCE / totalNetWorth) * 100 : 0;
+  const weightFooterStr = CASH_BALANCE > 0
+    ? `${totalStockPct.toFixed(1)}% <span style="font-size:9.5px; color:var(--muted); font-weight:normal;" title="สัดส่วนหุ้น ${totalStockPct.toFixed(1)}% + เงินสด ${cashPct.toFixed(1)}% = 100% Net Worth">(+${cashPct.toFixed(1)}% Cash)</span>`
+    : (rows.length > 0 ? '100.00%' : '—');
+
   document.getElementById('portfolio-tfoot').innerHTML = `<tr>
     <td colspan="2">Summary: ${rows.length.toLocaleString('en-US')} Tickers</td>
     <td>${fmtShares(totalShares)}</td><td></td>
     <td class="money-val" title="Click to view in ${altCurr}" onclick="showMoneyPopover(${totalCost}, event, 'Total Portfolio Cost')">${sym}${totalCost.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})}</td>
-    <td></td>
+    <td class="money-val" style="font-size:11.5px; font-weight:600;" title="สัดส่วนรวมของหุ้นทั้งหมดเทียบกับ Net Worth">${weightFooterStr}</td>
     <td></td>
     <td><span class="${colorClass(totalDayPct)}">${fmtSign(totalDayPct)}%</span></td>
     <td class="money-val" title="Click to view in ${altCurr}" onclick="showMoneyPopover(${totalMV}, event, 'Total Market Value')">${sym}${totalMV.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})}</td>
@@ -3944,8 +3957,6 @@ function renderMapPane(container, items, title) {
       div.addEventListener('mousemove', (e) => {
         const tt = document.getElementById('tooltip');
         tt.style.display = 'block';
-        tt.style.left = (e.clientX + 14) + 'px';
-        tt.style.top = (e.clientY - 10) + 'px';
         document.getElementById('tt-tick').textContent = cell.ticker;
         document.getElementById('tt-name').textContent = cell.name;
         const isThb = getActiveCurrency() === 'THB';
@@ -3997,6 +4008,36 @@ function renderMapPane(container, items, title) {
           return `<span style="color:var(--muted);">${cell.nextEarnDate || '—'}</span>`;
         });
         setTtMetric('tt-row-dd', 'tt-dd', cell.drawdown52w, v => `<span class="${colorClass(v)}">${fmtSign(v)}%</span>`);
+
+        // Viewport boundary clamping to keep tooltip entirely on screen at corners
+        const pad = 12;
+        const ttW = tt.offsetWidth || 230;
+        const ttH = tt.offsetHeight || 280;
+
+        let posX = e.clientX + 14;
+        let posY = e.clientY - 10;
+
+        // Overflowing right -> flip to left of cursor
+        if (posX + ttW > window.innerWidth - pad) {
+          posX = e.clientX - ttW - 14;
+        }
+        if (posX < pad) {
+          posX = pad;
+        }
+
+        // Overflowing bottom -> flip or shift upwards
+        if (posY + ttH > window.innerHeight - pad) {
+          posY = e.clientY - ttH - 10;
+          if (posY < pad) {
+            posY = Math.max(pad, window.innerHeight - ttH - pad);
+          }
+        }
+        if (posY < pad) {
+          posY = pad;
+        }
+
+        tt.style.left = posX + 'px';
+        tt.style.top = posY + 'px';
       });
       div.addEventListener('mouseleave', () => {
         document.getElementById('tooltip').style.display = 'none';
