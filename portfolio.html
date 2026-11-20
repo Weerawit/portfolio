@@ -1154,7 +1154,10 @@
     <div class="sum-sub" id="sum-gain-pct">—</div>
   </div>
   <div class="sum-card">
-    <div class="sum-label">Realized Gain</div>
+    <div class="sum-label" style="display:flex; justify-content:space-between; align-items:center;">
+      <span>Realized Gain</span>
+      <span onclick="filterRealizedTxns(event)" style="font-size:10px; color:var(--accent); cursor:pointer; text-decoration:underline;" title="Click to filter and view Realized transactions in Transaction History below">View Txns 🔍</span>
+    </div>
     <div class="sum-val money-val" id="sum-realized-d" title="Click to view in THB">—</div>
     <div class="sum-sub" id="sum-realized-pct">—</div>
   </div>
@@ -1189,8 +1192,14 @@
   <div class="transaction-panel">
     <div class="section-title" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
       <span>Transaction history <span id="txn-filter-indicator" style="color: var(--accent); font-size: 11px; margin-left: 8px;"></span></span>
-      <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
-        <input type="text" id="txn-search-input" placeholder="Search Ticker..." oninput="onTxnSearchInput(this.value)" style="border: 1px solid var(--border2); background: var(--bg3); color: var(--text); font-family: inherit; font-size: 12px; border-radius: 6px; padding: 4px 10px; width: 120px; outline: none;">
+      <div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap;">
+        <select id="txn-type-filter" onchange="setTxnTypeFilter(this.value)" style="border: 1px solid var(--border2); background: var(--bg3); color: var(--text); font-family: inherit; font-size: 11.5px; border-radius: 6px; padding: 4px 6px; outline: none; cursor: pointer;" title="Filter transactions by type (All, Realized Sells, Buys, Cash)">
+          <option value="all">All Types</option>
+          <option value="realized">💰 Realized (Sell)</option>
+          <option value="buy">🛒 Buy Only</option>
+          <option value="cash">💵 Cash (Deposit/Withdraw)</option>
+        </select>
+        <input type="text" id="txn-search-input" placeholder="Search Ticker..." oninput="onTxnSearchInput(this.value)" style="border: 1px solid var(--border2); background: var(--bg3); color: var(--text); font-family: inherit; font-size: 12px; border-radius: 6px; padding: 4px 10px; width: 115px; outline: none;">
         <label class="txn-exact-wrap" title="Match exact ticker symbol only (e.g. 'O' only)">
           <input type="checkbox" id="txn-exact-match" class="txn-checkbox" style="width: 12px; height: 12px; margin: 0; cursor: pointer;" onchange="toggleTxnExactMatch(this.checked)">
           <span>Exact</span>
@@ -1378,6 +1387,7 @@ let colorMode = 'day';
 const TXN_EXACT_MATCH_KEY = 'portfolio_txn_exact_match_v1';
 let txnFilter = null;
 let txnSearchQuery = '';
+let txnTypeFilter = 'all';
 let txnExactMatch = true;
 try {
   const savedExact = localStorage.getItem(TXN_EXACT_MATCH_KEY);
@@ -2061,13 +2071,69 @@ function onTxnSearchInput(val) {
   syncFilterHighlights();
 }
 
+function setTxnTypeFilter(type) {
+  txnTypeFilter = type || 'all';
+  updateTxnFilterUI();
+  renderTransactions();
+}
+
+function filterRealizedTxns(e) {
+  if (e) e.stopPropagation();
+  setTxnTypeFilter('realized');
+  const panel = document.getElementById('txn-search-input')?.closest('.transaction-panel');
+  if (panel) {
+    panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+}
+
 function updateTxnFilterUI() {
-  const activeFilter = txnSearchQuery || txnFilter;
-  document.getElementById('txn-filter-indicator').textContent = activeFilter ? `(Filter: ${activeFilter}${txnExactMatch ? ' [Exact]' : ''})` : '';
-  document.getElementById('btn-clear-filter').style.display = activeFilter ? 'inline-block' : 'none';
+  const activeTicker = txnSearchQuery || txnFilter;
+  const parts = [];
+  if (activeTicker) {
+    parts.push(`Ticker: ${activeTicker}${txnExactMatch ? ' [Exact]' : ''}`);
+  }
+  if (txnTypeFilter && txnTypeFilter !== 'all') {
+    if (txnTypeFilter === 'realized') {
+      const { realizedPLMap } = buildHoldingsFromTransactions();
+      const sells = transactions.filter(tx => {
+        if (tx.action !== 'sell') return false;
+        if (!activeTicker) return true;
+        const sym = (tx.ticker || '').trim().toUpperCase();
+        return txnExactMatch ? sym === activeTicker : sym.includes(activeTicker);
+      });
+      let totalRealized = 0;
+      sells.forEach(s => {
+        const r = realizedPLMap.get(s);
+        if (r) totalRealized += r.profit;
+      });
+      const sym = getCurrencySymbol();
+      const sign = totalRealized >= 0 ? '+' : '';
+      const color = colorClass(totalRealized);
+      parts.push(`Realized (${sells.length.toLocaleString('en-US')} Sells · <span class="${color}">${sign}${sym}${Math.abs(totalRealized).toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})}</span>)`);
+    } else if (txnTypeFilter === 'buy') {
+      parts.push('Buy Only');
+    } else if (txnTypeFilter === 'cash') {
+      parts.push('Cash Flow');
+    }
+  }
+
+  const hasActiveFilter = !!(activeTicker || (txnTypeFilter && txnTypeFilter !== 'all'));
+  const indicator = document.getElementById('txn-filter-indicator');
+  if (indicator) {
+    indicator.innerHTML = parts.length > 0 ? `(${parts.join(' · ')})` : '';
+  }
+  const clearBtn = document.getElementById('btn-clear-filter');
+  if (clearBtn) {
+    clearBtn.style.display = hasActiveFilter ? 'inline-block' : 'none';
+  }
+
   const searchInp = document.getElementById('txn-search-input');
-  if (searchInp && searchInp.value !== (activeFilter || '')) {
-    searchInp.value = activeFilter || '';
+  if (searchInp && searchInp.value !== (activeTicker || '')) {
+    searchInp.value = activeTicker || '';
+  }
+  const typeSelect = document.getElementById('txn-type-filter');
+  if (typeSelect && typeSelect.value !== txnTypeFilter) {
+    typeSelect.value = txnTypeFilter;
   }
   const exactEl = document.getElementById('txn-exact-match');
   if (exactEl && exactEl.checked !== txnExactMatch) {
@@ -2090,7 +2156,11 @@ function toggleTxnExactMatch(isChecked) {
 }
 
 function setTxnFilter(ticker) {
-  if (txnFilter === ticker || ticker === null) {
+  if (ticker === null) {
+    txnFilter = null;
+    txnSearchQuery = '';
+    txnTypeFilter = 'all';
+  } else if (txnFilter === ticker) {
     txnFilter = null;
     txnSearchQuery = '';
   } else {
@@ -2351,14 +2421,26 @@ function renderTransactions() {
   let filtered = transactions;
   const activeFilter = (txnSearchQuery || txnFilter || '').trim().toUpperCase();
   if (activeFilter) {
-    filtered = transactions.filter(tx => {
+    filtered = filtered.filter(tx => {
       const sym = (tx.ticker || '').trim().toUpperCase();
       return txnExactMatch ? sym === activeFilter : sym.includes(activeFilter);
     });
   }
+  if (txnTypeFilter === 'realized') {
+    filtered = filtered.filter(tx => tx.action === 'sell');
+  } else if (txnTypeFilter === 'buy') {
+    filtered = filtered.filter(tx => tx.action === 'buy');
+  } else if (txnTypeFilter === 'cash') {
+    filtered = filtered.filter(tx => tx.action === 'deposit' || tx.action === 'withdraw');
+  }
   
   if (!filtered.length) {
-    tbody.innerHTML = `<tr><td colspan="9" style="color: var(--muted); text-align:center; padding:14px;">No transactions found for ${activeFilter}${txnExactMatch ? ' (Exact)' : ''}.</td></tr>`;
+    let emptyLabel = 'No transactions found';
+    if (activeFilter) emptyLabel += ` for ${activeFilter}${txnExactMatch ? ' (Exact)' : ''}`;
+    if (txnTypeFilter === 'realized') emptyLabel += ' with Realized P/L (Sell)';
+    else if (txnTypeFilter === 'buy') emptyLabel += ' (Buy)';
+    else if (txnTypeFilter === 'cash') emptyLabel += ' (Cash)';
+    tbody.innerHTML = `<tr><td colspan="9" style="color: var(--muted); text-align:center; padding:14px;">${emptyLabel}.</td></tr>`;
     currentVisibleTxns = [];
     updateTxnSelectionSummary();
     return;
